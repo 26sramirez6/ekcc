@@ -1,22 +1,26 @@
-FILES=Lexer.c Parser.c Expression.c main.c
 CC=g++
-CFLAGS= -Wall -Werror -Wextra -g -std=c++1z
+CFLAGS= -Wall -Werror -Wextra -g -std=c++11 -Wno-deprecated-register -Wno-unused-parameter -Wno-unneeded-internal-declaration -Wno-unused-function
 
-test: $(FILES) 
-	$(CC) $(CFLAGS) $(FILES) -o test
+all: clean ekcc
 
-Lexer.c: Lexer.l Parser.y
-	flex -o $@ Lexer.l
-
-test_lexer: Lexer.c
-	$(CC) $(CFLAGS) $< -o $@ -ll
+ekcc: ekcc.cpp Lexer.cpp Parser.cpp ValidTypes.cpp Expression.cpp
+	$(CC) $(CFLAGS) $^ -o $@
 	cat test.ek | ./$@
 
-Parser.c: Parser.y Lexer.c
-	bison -o $@ Parser.y
+Lexer.o: Lexer.cpp Parser.cpp
+	$(CC) $(CFLAGS) -c $< -o $@
 
-Parser.h: Parser.c
+Parser.o: Parser.cpp Lexer.cpp
+	$(CC) $(CFLAGS) -c $< -o $@
+
+Lexer.cpp: Lexer.l Parser.y
+	flex --header-file=Lexer.hpp --outfile=$@ Lexer.l
+
+Parser.cpp: Parser.y Lexer.cpp ValidTypes.hpp
+	bison -o $@ --defines=Parser.hpp Parser.y
+
+Parser.hpp: Parser.cpp
 	noop
 
 clean:
-	rm -f *.o *~ Lexer.c Lexer.h Parser.c Parser.h test
+	rm -f *.o *~ Lexer.cpp Lexer.hpp Parser.cpp Parser.hpp ekcc
