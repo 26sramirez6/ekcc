@@ -80,6 +80,8 @@
 %token <variable> T_VARID
 
 // declare symbols
+%token T_LBRACE "{"
+%token T_RBRACE "}"
 %token T_LPAREN "("
 %token T_RPAREN ")"
 %token T_SEMICOLON ";"
@@ -102,6 +104,8 @@
 // declare unary
 %token T_NEG "!"
 
+%token T_ASSIGN "="
+
 // %type <expression> expr
 
 // %left "+"
@@ -121,7 +125,7 @@ externs:
 
 extern:
   T_FUNCTION_EXTERN type globid "(" ")" ";" {}
-  | T_FUNCTION_EXTERN T_FUNCTION_EXTERN type globid "(" tdecls ")" ";" {}
+  | T_FUNCTION_EXTERN type globid "(" tdecls ")" ";" {}
   ;
 
 funcs:
@@ -132,6 +136,7 @@ funcs:
 func:
   T_FUNCTION_DEF type globid "(" ")" blk {}
   | T_FUNCTION_DEF type globid "(" vdecls ")" blk {}
+  | T_FUNCTION_DEF type T_FUNCTION_RUN "("")" blk {}
   ;
 
 blk:
@@ -205,7 +210,7 @@ tdecls:
   ;
 
 vdecl:
-  type T_VARID { cout << "type variable" << endl;}
+  type T_VARID { cout << "parser_vdecl" << endl;}
   ;
 
 type:
@@ -214,12 +219,12 @@ type:
   | T_TYPE_FLOAT { cout << "parser_control: if" << endl;}
   | T_TYPE_BOOL {}
   | T_TYPE_VOID {}
-  | T_TYPE_REF type { cout << "ref" << endl; }
-  | T_TYPE_NOALIAS T_TYPE_REF type { cout << "nolias ref" << endl; }
+  | T_TYPE_REF type { cout << "parser_ref" << endl; }
+  | T_TYPE_NOALIAS T_TYPE_REF type { cout << "parser_nolias ref" << endl; }
   ;
 
 varid:
-  T_VARID { cout << "variable" << endl;}
+  T_VARID { cout << "parser_variable" << endl;}
   ;
 
 globid:

@@ -31,29 +31,34 @@
 "extern"          { cout << "function: " << yytext << endl; return T_FUNCTION_EXTERN; }
 
 \$[a-zA-Z_]+[a-zA-Z0-9_]* { cout << "variable: " << yytext << endl; return T_VARID;}
-[a-zA-Z_]+[a-zA-Z0-9_]* { return T_IDENT; }
+[a-zA-Z_]+[a-zA-Z0-9_]* { cout << "identifier: " << yytext << endl; return T_IDENT; }
 \"[^\n"]+\"     { cout << "String" << yytext << endl; return T_STRING_LITERAL; }
 [0-9]+          { cout << "INT" << yytext << endl; return T_INT_LITERAL; }
 [0-9]+\.[0-9]+  { cout << "FLOAT" << yytext << endl; return T_FLOAT_LITERAL; }
 
-"*"           { return T_STAR; }
-"+"           { return T_PLUS; }
-"-"           { return T_HYPHEN; }
-"/"           { return T_FSLASH; }
+"*"           { cout << "symbol: " << yytext << endl; return T_STAR; }
+"+"           { cout << "symbol: " << yytext << endl; return T_PLUS; }
+"-"           { cout << "symbol: " << yytext << endl; return T_HYPHEN; }
+"/"           { cout << "symbol: " << yytext << endl; return T_FSLASH; }
 
-">"           { return T_GT; }
-"<"           { return T_LT; }
-"||"          { return T_OR; }
-"&&"          { return T_AND; }
-"=="          { return T_EQ; }
-"!"           { return T_NEG; }
+"="            { cout << "symbol: " << yytext << endl; return T_ASSIGN;}
 
-"("           { return T_LPAREN; }
-")"           { return T_RPAREN; }
-"["           { return T_LBRACKET; }
-"]"           { return T_RBRACKET; }
-"#"           { return T_POUND; }
-","           { return T_COMMA;}
+">"           { cout << "symbol: " << yytext << endl; return T_GT; }
+"<"           { cout << "symbol: " << yytext << endl; return T_LT; }
+"||"          { cout << "symbol: " << yytext << endl; return T_OR; }
+"&&"          { cout << "symbol: " << yytext << endl; return T_AND; }
+"=="          { cout << "symbol: " << yytext << endl; return T_EQ; }
+"!"           { cout << "symbol: " << yytext << endl; return T_NEG; }
+
+"{"           { cout << "symbol: " << yytext << endl; return T_LBRACE; }
+"}"           { cout << "symbol: " << yytext << endl; return T_RBRACE; }
+"("           { cout << "symbol: " << yytext << endl; return T_LPAREN; }
+")"           { cout << "symbol: " << yytext << endl; return T_RPAREN; }
+"["           { cout << "symbol: " << yytext << endl; return T_LBRACKET; }
+"]"           { cout << "symbol: " << yytext << endl; return T_RBRACKET; }
+"#"           { cout << "symbol: " << yytext << endl; return T_POUND; }
+","           { cout << "symbol: " << yytext << endl; return T_COMMA;}
+";"           { cout << "symbol: " << yytext << endl; return T_SEMICOLON;}
 
 
 %%
