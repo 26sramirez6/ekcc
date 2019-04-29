@@ -3,8 +3,8 @@ CFLAGS= -Wall -Werror -Wextra -g -std=c++11 -Wno-deprecated-register -Wno-unused
 
 all: clean ekcc
 
-ekcc: ekcc.cpp Lexer.cpp Parser.cpp ValidTypes.cpp Expression.cpp
-	$(CC) $(CFLAGS) $^ -o $@
+ekcc: Lexer.cpp Parser.cpp ValidTypes.cpp Expression.cpp
+	$(CC) $(CFLAGS) $^ -ll -o $@
 	cat test.ek | ./$@
 
 Lexer.o: Lexer.cpp Parser.cpp

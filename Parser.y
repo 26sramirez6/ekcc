@@ -7,30 +7,23 @@
     #include "Lexer.hpp"
     #include "Parser.hpp"
     using namespace std;
-    // #include "ast.h"
-    // extern int yylex();
-    //extern int yyparse();
-    // extern FILE * yyin;
-    
-    int yyerror(SExpression **expression, yyscan_t scanner, const char *msg) {
-    /* Add error handling routine as needed */
-    }
+    // stuff from flex that bison needs to know about:
+    extern int yylex();
+    extern int yyparse();
+    extern FILE *yyin;
+  
+    void yyerror(const char *s);
 
 %}
 
 %code requires {
   #include "ValidTypes.hpp"
   #include "Expression.h"
-  typedef void* yyscan_t;
 }
 
-%define api.pure
-%lex-param   { yyscan_t scanner }
-%parse-param { SExpression **expression }
-%parse-param { yyscan_t scanner }
-
-%union {
+%union{
   int ival;
+  bool bval;
   float fval;
   char *sval;
   IntType intType;
@@ -58,6 +51,8 @@
 %token <ival> T_INT_LITERAL "number"
 %token <fval> T_FLOAT_LITERAL
 %token <sval> T_STRING_LITERAL
+%token <bval> T_BOOL_FALSE_LITERAL
+%token <bval> T_BOOL_TRUE_LITERAL
 
 // declare types
 %token <intType> T_TYPE_INT
@@ -81,27 +76,62 @@
 // declare symbols
 %token T_LPAREN "("
 %token T_RPAREN ")"
+%token T_SEMICOLON ";"
+%token T_LBRACKET "["
+%token T_RBRACKET "]"
+%token T_DOLLAR "$"
+%token T_POUND "#"
+// declare arithmetics
 %token T_PLUS "+"
 %token T_STAR "*"
+%token T_FSLASH "/"
+%token T_HYPHEN "-"
+// declare comparators
+%token T_GT ">"
+%token T_LT "<"
+%token T_OR "||"
+%token T_AND "&&"
+%token T_EQ "=="
+// declare unary
+%token T_NEG "!"
 
-
-
-%type <expression> expr
+// %type <expression> expr
 
 %left "+"
 %left "*"
 
 %%
 
-input
-    : expr { *expression = $1; }
-    ;
+end:
+a a { cout << "the end of file" << endl;}
+;
 
-expr
-    : expr[L] "+" expr[R] { $$ = createOperation( eADD, $L, $R ); }
-    | expr[L] "*" expr[R] { $$ = createOperation( eMULTIPLY, $L, $R ); }
-    | "(" expr[E] ")"     { $$ = $E; }
-    | "number"            { $$ = createNumber($1); }
-    ;
+
+a:
+  T_TYPE_INT { cout << "parser_type: int" << endl; }
+  | T_CONTROL_IF { cout << "parser_control: if" << endl;}
+  ;
+
 
 %%
+
+int main(int, char**) {
+  // open a file handle to a particular file:
+  FILE *myfile = fopen("test.ek", "r");
+  // make sure it's valid:
+  if (!myfile) {
+    cout << "I can't open a.snazzle.file!" << endl;
+    return -1;
+  }
+  // Set flex to read from it instead of defaulting to STDIN:
+  yyin = myfile;
+
+  // Parse through the input:
+  yyparse();
+}
+
+void yyerror(const char *s) {
+  cout << "EEK, parse error!  Message: " << s << endl;
+  // might as well halt now:
+  exit(-1);
+}

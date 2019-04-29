@@ -6,13 +6,9 @@
   using namespace std;
 %}
 
-%option warn nodefault
-%option reentrant
-%option bison-bridge
-%option noyywrap
 %%
-[ \t\n]         ;
-"int"             { cout << "type: " << yytext << endl; return T_TYPE_INT; }
+[ \t\n]           { continue; }
+"int"             { cout << "type: " << yytext << endl; yylval.sval = strdup(yytext); return T_TYPE_INT; }
 "float"           { cout << "type: " << yytext << endl; return T_TYPE_FLOAT; }
 "bool"            { cout << "type: " << yytext << endl; return T_TYPE_BOOL; }
 "cint"            { cout << "type: " << yytext << endl; return T_TYPE_CINT; }
@@ -40,17 +36,7 @@
 .            { continue; /* Ignore unexpected characters. */}
 
 %%
-int yyerror(const char *msg) {
-    fprintf(stderr, "Error: %s\n", msg);
-    return 0;
-}
 
-// int main(int, char**) {
-//   // open a file:
-//     FILE *input_file = fopen("test.ek", "r");
-//     yyin = input_file;
-//     while(yylex());
-// }
 //((noalias)? ref) { cout << "type: " << yytext << endl; yyval.Init(yytext); return T_TYPE_REF; }
 
 
