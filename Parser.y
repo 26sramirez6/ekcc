@@ -61,6 +61,7 @@
 %token <boolType> T_TYPE_BOOL
 %token <voidType> T_TYPE_VOID
 %token <refType> T_TYPE_REF
+%token <noliasType> T_TYPE_NOLIAS
 
 %token <ifControl> T_CONTROL_IF
 %token <elseControl> T_CONTROL_ELSE
@@ -97,8 +98,8 @@
 
 // %type <expression> expr
 
-%left "+"
-%left "*"
+// %left "+"
+// %left "*"
 
 %%
 
