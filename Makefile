@@ -5,7 +5,7 @@ CFLAGS= -Wall -Werror -Wextra -g -std=c++1z
 test: $(FILES) 
 	$(CC) $(CFLAGS) $(FILES) -o test
 
-Lexer.c: Lexer.l
+Lexer.c: Lexer.l Parser.y
 	flex -o $@ Lexer.l
 
 test_lexer: Lexer.c
@@ -14,6 +14,9 @@ test_lexer: Lexer.c
 
 Parser.c: Parser.y Lexer.c
 	bison -o $@ Parser.y
+
+Parser.h: Parser.c
+	noop
 
 clean:
 	rm -f *.o *~ Lexer.c Lexer.h Parser.c Parser.h test
