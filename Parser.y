@@ -44,11 +44,13 @@
   DefFunction defFunction;
   ExternFunction externFunction;
 
+  Variable variable;
+
   SExpression *expression;
 }
 
 // declare literals
-%token <ival> T_INT_LITERAL "number"
+%token <ival> T_INT_LITERAL
 %token <fval> T_FLOAT_LITERAL
 %token <sval> T_STRING_LITERAL
 %token <bval> T_BOOL_FALSE_LITERAL
@@ -61,7 +63,7 @@
 %token <boolType> T_TYPE_BOOL
 %token <voidType> T_TYPE_VOID
 %token <refType> T_TYPE_REF
-%token <noliasType> T_TYPE_NOLIAS
+%token <noliasType> T_TYPE_NOALIAS
 
 %token <ifControl> T_CONTROL_IF
 %token <elseControl> T_CONTROL_ELSE
@@ -74,6 +76,9 @@
 %token <defFunction> T_FUNCTION_DEF
 %token <externFunction> T_FUNCTION_EXTERN 
 
+%token T_IDENT
+%token <variable> T_VARID
+
 // declare symbols
 %token T_LPAREN "("
 %token T_RPAREN ")"
@@ -82,6 +87,7 @@
 %token T_RBRACKET "]"
 %token T_DOLLAR "$"
 %token T_POUND "#"
+%token T_COMMA ","
 // declare arithmetics
 %token T_PLUS "+"
 %token T_STAR "*"
@@ -103,25 +109,143 @@
 
 %%
 
-end:
-a a { cout << "the end of file" << endl;}
-;
-
-
-a:
-  T_TYPE_INT { cout << "parser_type: int" << endl; }
-  | T_CONTROL_IF { cout << "parser_control: if" << endl;}
+prog:
+  funcs { cout << "the end of file" << endl;}
+  | externs funcs { cout << "the end of file" << endl;}
   ;
 
+externs:
+  extern {}
+  | extern externs {}
+  ;
+
+extern:
+  T_FUNCTION_EXTERN type globid "(" ")" ";" {}
+  | T_FUNCTION_EXTERN T_FUNCTION_EXTERN type globid "(" tdecls ")" ";" {}
+  ;
+
+funcs:
+  func {}
+  | func funcs {}
+  ;
+
+func:
+  T_FUNCTION_DEF type globid "(" ")" blk {}
+  | T_FUNCTION_DEF type globid "(" vdecls ")" blk {}
+  ;
+
+blk:
+  "{" "}" {}
+  | "{" stmts "}" {}
+  ; 
+
+stmts:
+  stmt {}
+  | stmt stmts {}
+  ;
+
+stmt:
+  blk {}
+  | T_CONTROL_RETURN ";" {}
+  | T_CONTROL_RETURN exp ";" {}
+  | vdecl "=" exp ";" {}
+  | exp ";" {}
+  | T_CONTROL_WHILE "(" exp ")" stmt {}
+  | T_CONTROL_IF "(" exp ")" stmt {}
+  | T_CONTROL_IF "(" exp ")" stmt  T_CONTROL_ELSE stmt {}
+  | T_FUNCTION_PRINT exp ";" {}
+  | T_FUNCTION_PRINT slit ";" {}
+  ;
+
+exp:
+  "(" exp ")" {}
+  | binop {}
+  | uop {}
+  | lit {}
+  | varid {}
+  | globid "(" ")" {}
+  | globid "(" exp ")" {}
+  ;
+
+binop:
+  arithops {}
+  | logicops {}
+  | varid "=" exp {}
+  | "[" type "]" exp {}
+  ;
+
+arithops:
+  exp "*" exp {}
+  | exp "/" exp {}
+  | exp "+" exp {}
+  | exp "-" exp {}
+  ;
+
+logicops:
+  exp "==" exp {}
+  | exp "<" exp {}
+  | exp ">" exp {}
+  | exp "&&" exp {}
+  | exp "||" exp {}
+  ;
+
+uop:
+  "!" exp {}
+  | "-" exp {}
+  ;
+
+vdecls:
+  vdecl {}
+  | vdecl "," vdecls { cout << "vdecls" << endl; }
+  ;
+
+tdecls:
+  type
+  | type "," tdecls {}
+  ;
+
+vdecl:
+  type T_VARID { cout << "type variable" << endl;}
+  ;
+
+type:
+  T_TYPE_INT { cout << "parser_type: int" << endl; }
+  | T_TYPE_CINT {}
+  | T_TYPE_FLOAT { cout << "parser_control: if" << endl;}
+  | T_TYPE_BOOL {}
+  | T_TYPE_VOID {}
+  | T_TYPE_REF type { cout << "ref" << endl; }
+  | T_TYPE_NOALIAS T_TYPE_REF type { cout << "nolias ref" << endl; }
+  ;
+
+varid:
+  T_VARID { cout << "variable" << endl;}
+  ;
+
+globid:
+  T_IDENT {}
+  ;
+
+lit:
+  T_INT_LITERAL {}
+  | T_FLOAT_LITERAL {}
+  | T_BOOL_FALSE_LITERAL {}
+  | T_BOOL_TRUE_LITERAL {}
+  ;
+
+
+slit:
+  T_STRING_LITERAL {}
+  ;
 
 %%
 
 int main(int, char**) {
   // open a file handle to a particular file:
-  FILE *myfile = fopen("test.ek", "r");
+  FILE *myfile = fopen("test1.ek", "r");
   // make sure it's valid:
   if (!myfile) {
-    cout << "I can't open a.snazzle.file!" << endl;
+    cout << "I can't open file!" << endl;
     return -1;
   }
   // Set flex to read from it instead of defaulting to STDIN:
