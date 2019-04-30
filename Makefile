@@ -3,15 +3,20 @@ CFLAGS= -Wall -g -std=c++11 #-Werror -Wextra -Wno-deprecated-register -Wno-unuse
 
 all: clean ekcc
 
-ekcc: Lexer.cpp Parser.cpp ValidTypes.cpp Expression.cpp
-	$(CC) $(CFLAGS) $^ -ll -o $@
-	cat test.ek | ./$@
+ekcc: Lexer.o Parser.o Expression.o
+	$(CC) $(CFLAGS) $^ -lfl -o $@
 
-Lexer.o: Lexer.cpp Parser.cpp
+Expression.o: Expression.cpp
 	$(CC) $(CFLAGS) -c $< -o $@
 
-Parser.o: Parser.cpp Lexer.cpp
+ValidTypes.o: ValidTypes.cpp
 	$(CC) $(CFLAGS) -c $< -o $@
+
+Lexer.o: Lexer.cpp Parser.cpp AST.hpp
+	$(CC) $(CFLAGS) -c $< -o $@ -lfl
+
+Parser.o: Parser.cpp Lexer.cpp AST.hpp
+	$(CC) $(CFLAGS) -c $< -o $@ -lfl
 
 Lexer.cpp: Lexer.l Parser.y
 	flex --header-file=Lexer.hpp --outfile=$@ Lexer.l

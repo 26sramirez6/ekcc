@@ -21,9 +21,16 @@ using std::move;
 
 struct ASTNode {
 	vector<ASTNode *> children_;
-	string astName_;
-	virtual void Print();
-	virtual ~ASTNode();
+	static string astName_;
+	virtual void PrintRecursive() {
+		PrintSelf();
+		for (auto node: this->children_) {
+			node->PrintRecursive();
+		}
+	};
+	virtual void PrintSelf() {};
+	virtual ~ASTNode() {};
+
 };
 
 
@@ -38,15 +45,20 @@ struct ProgramNode : public ASTNode {
 	}
 
 	void
-	Print() {
+	PrintSelf() {
 		cout << "name: prog" << endl;
-		for (auto node: this->children_) {
-			node->Print();
-		}
 	}
 };
 
+
 struct ExternNode : public ASTNode {
+	void
+	PrintSelf() {
+		cout << "name: extern" << endl;
+	}
+};
+
+struct ExternsNode : public ASTNode {
 
 };
 
@@ -65,16 +77,16 @@ struct FuncsNode : public ASTNode {
 		}
 		this->children_.push_back(funcNode);
 	}
+
+
 };
 
 struct VariableNode : public ASTNode {
 	ValidType type_;
 	string identifier_;
-	static string astName;
 	VariableNode(ValidType type, string identifier) : type_(type), identifier_(identifier){
-
+		this->astName_ = "vardeclstmt";
 	}
 };
-string VariableNode::astName = "vardeclstmt";
 
 #endif /* EKCC_AST_HPP_ */

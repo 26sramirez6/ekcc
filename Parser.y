@@ -7,14 +7,13 @@
     #include "AST.hpp"
     #include "Lexer.hpp"
     #include "Parser.hpp"
-    #include "AST.hpp"
     using namespace std;
     // stuff from flex that bison needs to know about:
     extern int yylex();
     extern int yyparse();
     extern FILE *yyin;
   
-    void yyerror(ASTNode * node, const char *s) {
+    void yyerror(ProgramNode ** node, const char *s) {
     	
     }
 
@@ -50,7 +49,7 @@
   ExternFunction externFunction;
 
   ASTNode * node;
-  ProgramNode * prog;
+  ProgramNode * programNode;
   FuncNode * funcNode;
   FuncsNode * funcsNode;
   ExternNode * externNode;
@@ -138,8 +137,8 @@ externs:
   ;
 
 extern:
-  T_FUNCTION_EXTERN type globid "(" ")" ";" { $$ = new ExternNode() }
-  | T_FUNCTION_EXTERN type globid "(" tdecls ")" ";" { $$ = new ExternNode() }
+  T_FUNCTION_EXTERN type globid "(" ")" ";" { $$ = new ExternNode(); }
+  | T_FUNCTION_EXTERN type globid "(" tdecls ")" ";" { $$ = new ExternNode(); }
   ;
 
 funcs:
@@ -148,9 +147,9 @@ funcs:
   ;
 
 func:
-  T_FUNCTION_DEF type globid "(" ")" blk { $$ = new FuncNode() }
-  | T_FUNCTION_DEF type globid "(" vdecls ")" blk { $$ = new FuncNode() }
-  | T_FUNCTION_DEF type T_FUNCTION_RUN "("")" blk { $$ = new FuncNode() }
+  T_FUNCTION_DEF type globid "(" ")" blk { $$ = new FuncNode(); }
+  | T_FUNCTION_DEF type globid "(" vdecls ")" blk { $$ = new FuncNode(); }
+  | T_FUNCTION_DEF type T_FUNCTION_RUN "("")" blk { $$ = new FuncNode(); }
   ;
 
 blk:
@@ -271,7 +270,7 @@ int main(int, char**) {
   yyin = myfile;
 
   // Set up the root tree
-  ProgramNode * root = new ProgramNode();
+  ProgramNode * root;
   
   // Parse through the input:
   yyparse(&root);
