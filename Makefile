@@ -1,7 +1,10 @@
 CC=g++
-CFLAGS= -Wall -g -std=c++11 #-Werror -Wextra -Wno-deprecated-register -Wno-unused-parameter -Wno-unneeded-internal-declaration -Wno-unused-function -Wno-sign-compare 
+CFLAGS= -Wall -g3 -std=c++11 #-Werror -Wextra -Wno-deprecated-register -Wno-unused-parameter -Wno-unneeded-internal-declaration -Wno-unused-function -Wno-sign-compare 
 
 all: clean ekcc
+
+valgrind: clean ekcc 
+	valgrind --leak-check=full --track-origins=yes --log-file="valgrind.out" --show-reachable=yes -v ./ekcc
 
 ekcc: Lexer.o Parser.o Expression.o
 	$(CC) $(CFLAGS) $^ -lfl -o $@

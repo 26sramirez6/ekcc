@@ -25,16 +25,9 @@ struct VoidType : public ValidType {
 };
 
 struct RefType : public ValidType {
-    bool noAlias_;
-    void
-    Init(char * line) {
-        if (strstr(line, "alias")!=NULL) {
-            cout << "no alias defined" << endl;
-            this->noAlias_ = true;
-        } else {
-            this->noAlias_ = false;
-        }
-    }
+    bool noAlias_ = false;
+    RefType() {}
+    RefType(bool noAlias) : noAlias_(noAlias) {}
 };
 
 struct IfControl {

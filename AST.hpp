@@ -21,14 +21,24 @@ using std::move;
 
 struct ASTNode {
 	vector<ASTNode *> children_;
-	static string astName_;
-	virtual void PrintRecursive() {
+	virtual void
+	PrintRecursive() {
 		PrintSelf();
 		for (auto node: this->children_) {
 			node->PrintRecursive();
 		}
 	};
-	virtual void PrintSelf() {};
+
+	virtual void
+	PrintSelf() {
+		cout << "name: " << GetName() << endl;
+	};
+
+	virtual string
+	GetName() {
+		return "";
+	}
+
 	virtual ~ASTNode() {};
 
 };
@@ -44,26 +54,47 @@ struct ProgramNode : public ASTNode {
 		this->children_.push_back(funcNodes);
 	}
 
-	void
-	PrintSelf() {
-		cout << "name: prog" << endl;
+	string
+	GetName() {
+		return string("prog");
 	}
 };
 
-
 struct ExternNode : public ASTNode {
-	void
-	PrintSelf() {
-		cout << "name: extern" << endl;
+	string
+	GetName() {
+		return string("extern");
 	}
 };
 
 struct ExternsNode : public ASTNode {
-
+	string
+	GetName() {
+		return string("externs");
+	}
 };
 
 struct FuncNode : public ASTNode {
 
+	ValidType * retType_;
+	string identifier_;
+
+	FuncNode(ValidType * retType, string identifier,
+		ASTNode * blockNode) : retType_(retType), identifier_(identifier){
+		this->children_.push_back(blockNode);
+	}
+
+	FuncNode(ValidType * retType, string identifier,
+		ASTNode * vdeclsNode, ASTNode * blockNode) :
+			retType_(retType), identifier_(identifier) {
+		this->children_.push_back(vdeclsNode);
+		this->children_.push_back(blockNode);
+	}
+
+	string
+	GetName() {
+		return string("func");
+	}
 };
 
 struct FuncsNode : public ASTNode {
@@ -78,14 +109,47 @@ struct FuncsNode : public ASTNode {
 		this->children_.push_back(funcNode);
 	}
 
+	string
+	GetName() {
+		return string("funcs");
+	}
 
 };
 
-struct VariableNode : public ASTNode {
-	ValidType type_;
+struct BlockNode: public ASTNode {
+	string
+	GetName() {
+		return string("blk");
+	}
+};
+
+struct VdeclNode : public ASTNode {
+	ValidType * type_;
 	string identifier_;
-	VariableNode(ValidType type, string identifier) : type_(type), identifier_(identifier){
-		this->astName_ = "vardeclstmt";
+	VdeclNode(ValidType * type, string identifier) :
+		type_(type), identifier_(identifier) { }
+
+	string
+	GetName() {
+		return string("vdecl");
+	}
+};
+
+struct VdeclsNode : public ASTNode {
+	VdeclsNode(VdeclNode * vdeclNode) {
+		this->children_.push_back(vdeclNode);
+	}
+
+	VdeclsNode(VdeclsNode * vdeclsNode, VdeclNode * vdeclNode) {
+		for (auto node : vdeclsNode->children_) {
+			this->children_.push_back(node);
+		}
+		this->children_.push_back(vdeclNode);
+	}
+
+	string
+	GetName() {
+		return string("vdecls");
 	}
 };
 
