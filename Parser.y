@@ -37,17 +37,18 @@
 //  VoidType voidType;
 //  RefType refType;
 
-  IfControl ifControl;
-  ElseControl elseControl;
-  WhileControl whileControl;
-  ForControl forControl;
-  ReturnControl returnControl;
-
-  PrintFunction printFunction;
-  RunFunction runFunction;
-  DefFunction defFunction;
-  ExternFunction externFunction;
+//  IfControl ifControl;
+//  ElseControl elseControl;
+//  WhileControl whileControl;
+//  ReturnControl returnControl;
+//
+//  PrintFunction printFunction;
+//  RunFunction runFunction;
+//  DefFunction defFunction;
+//  ExternFunction externFunction;
   
+  LiteralTypes literalType;
+  ControlFlow * controlFlow;
   ValidType * validType;
   ASTNode * node;
   ProgramNode * programNode;
@@ -58,7 +59,11 @@
   BlockNode * blockNode;
   VdeclNode * vdeclNode;
   VdeclsNode * vdeclsNode;
-  SExpression *expression;
+  StatementNode * statementNode;
+  StatementsNode * statementsNode;
+  ExpressionNode * expressionNode;
+  ExpressionsNode * expressionsNode;
+  OperationNode * operationNode;
 }
 
 // declare literals
@@ -118,6 +123,7 @@
 %token T_ASSIGN "="
 
 // declare types
+%type <literalType> lit
 %type <validType> type
 %type <programNode> prog
 %type <funcsNode> funcs
@@ -128,6 +134,15 @@
 %type <externNode> extern
 %type <blockNode> blk
 %type <sval> globid
+%type <statementsNode> stmts
+%type <statementNode> stmt
+%type <expressionsNode> exps
+%type <expressionNode> exp
+%type <operationNode> binop
+%type <operationNode> arithops
+%type <operationNode> logicops
+%type <operationNode> uop
+
 
 %parse-param { ProgramNode ** root }
 
@@ -144,8 +159,8 @@ externs:
   ;
 
 extern:
-  T_FUNCTION_EXTERN type globid "(" ")" ";" { $$ = new ExternNode(); }
-  | T_FUNCTION_EXTERN type globid "(" tdecls ")" ";" { $$ = new ExternNode(); }
+  T_FUNCTION_EXTERN type T_IDENT "(" ")" ";" { $$ = new ExternNode(); }
+  | T_FUNCTION_EXTERN type T_IDENT "(" tdecls ")" ";" { $$ = new ExternNode(); }
   ;
 
 funcs:
@@ -154,69 +169,76 @@ funcs:
   ;
 
 func:
-  T_FUNCTION_DEF type globid "(" ")" blk { $$ = new FuncNode($2, $3, $6); }
-  | T_FUNCTION_DEF type globid "(" vdecls ")" blk { $$ = new FuncNode($2, $3, $5, $7); }
+  T_FUNCTION_DEF type T_IDENT "(" ")" blk { $$ = new FuncNode($2, $3, $6); }
+  | T_FUNCTION_DEF type T_IDENT "(" vdecls ")" blk { $$ = new FuncNode($2, $3, $5, $7); }
   | T_FUNCTION_DEF type T_FUNCTION_RUN "(" ")" blk { $$ = new FuncNode($2, "run", $6); }
   ;
 
 blk:
   "{" "}" { $$ = new BlockNode(); }
-  | "{" stmts "}" { $$ = new BlockNode(); }
+  | "{" stmts "}" { $$ = new BlockNode($2); }
   ; 
 
 stmts:
-  stmt {}
-  | stmt stmts { }
+  stmt { $$ = new StatementsNode($1); }
+  | stmts stmt { $$ = new StatementsNode($1, $2); }
   ;
 
 stmt:
-  blk { }
-  | T_CONTROL_RETURN ";" { }
-  | T_CONTROL_RETURN exp ";" { }
-  | vdecl "=" exp ";" { }
-  | exp ";" { }
-  | T_CONTROL_WHILE "(" exp ")" stmt { }
-  | T_CONTROL_IF "(" exp ")" stmt { }
-  | T_CONTROL_IF "(" exp ")" stmt  T_CONTROL_ELSE stmt { }
-  | T_FUNCTION_PRINT exp ";" { }
-  | T_FUNCTION_PRINT slit ";" { }
+  blk { $$ = new StatementNode($1); }
+  | T_CONTROL_RETURN ";" { $$ = new StatementNode(new ReturnControl()); }
+  | T_CONTROL_RETURN exp ";" { $$ = new StatementNode(new ReturnControl(), $2); }
+  | vdecl "=" exp ";" { $$ = new StatementNode($1, $3); }
+  | exp ";" { $$ = new StatementNode($1); }
+  | T_CONTROL_WHILE "(" exp ")" stmt { $$ = new StatementNode(new WhileControl(), $3, $5); }
+  | T_CONTROL_IF "(" exp ")" stmt { $$ = new StatementNode(new IfControl(), $3, $5); }
+  | T_CONTROL_IF "(" exp ")" stmt  T_CONTROL_ELSE stmt { 
+	  $$ = new StatementNode(new ElseControl(), $3, $5, $7);
+  }
+  | T_FUNCTION_PRINT exp ";" { $$ = new StatementNode(new PrintFunction(), $2); }
+  | T_FUNCTION_PRINT T_STRING_LITERAL ";" { $$ = new StatementNode(new PrintFunction(), $2); }
+  ;
+
+exps:
+  exp { $$ = new ExpressionsNode($1); }
+  | exps "," exp { $$ = new ExpressionsNode($1, $3) }
   ;
 
 exp:
-  "(" exp ")" { }
-  | binop { }
-  | uop {  }
-  | lit {  }
-  | varid {  }
-  | globid "(" ")" {  }
-  | globid "(" exp ")" {  }
+  "(" exp ")" { $$ = new ExpressionNode($1); }
+  | binop { $$ = new ExpressionNode($1); }
+  | uop { $$ = new ExpressionNode($1); }
+  | lit { $$ = new ExpressionNode($1); }
+  | varid { $$ = new ExpressionNode($1); }
+  | globid "(" ")" { $$ = new ExpressionNode($1); }
+  | globid "(" exps ")" { $$ = new ExpressionNode($1, $3); }
   ;
 
 binop:
-  arithops {  }
-  | logicops {  }
-  | varid "=" exp {  }
-  | "[" type "]" exp {  }
+  arithops { $$ = $1; }
+  | logicops { $$ = $1; }
+  | varid "=" exp { $$ = new OperationNode(Assign, $1, $3); }
+  | "[" type "]" exp { $$ = new OperationNode(Cast, $2, $4); }
   ;
 
 arithops:
-  exp "*" exp {  }
-  | exp "/" exp {  }
-  | exp "+" exp {  }
-  | exp "-" exp {  }
+  exp "*" exp { $$ = new OperationNode(Multiply, $1, $3); }
+  | exp "/" exp { $$ = new OperationNode(Divide, $1, $3); }
+  | exp "+" exp { $$ = new OperationNode(Add, $1, $3);  }
+  | exp "-" exp { $$ = new OperationNode(Subtract, $1, $3); }
   ;
 
 logicops:
-  exp "==" exp {  }
-  | exp "<" exp {  }
-  | exp ">" exp {  }
-  | exp "&&" exp {  }
-  | exp "||" exp {  }
+  exp "==" exp { $$ = new OperationNode(Equality, $1, $3); }
+  | exp "<" exp { $$ = new OperationNode(LessThan, $1, $3); }
+  | exp ">" exp { $$ = new OperationNode(GreaterThan, $1, $3); }
+  | exp "&&" exp { $$ = new OperationNode(Land, $1, $3); }
+  | exp "||" exp { $$ = new OperationNode(Lor, $1, $3); }
   ;
 
 uop:
-  "!" exp { }
-  | "-" exp { }
+  "!" exp { $$ = new OperationNode(Negate, $2); }
+  | "-" exp { $$ = new OperationNode(Negative, $2); }
   ;
 
 vdecls:
@@ -239,29 +261,29 @@ type:
   | T_TYPE_FLOAT { $$ = new FloatType(); }
   | T_TYPE_BOOL { $$ = new BoolType(); }
   | T_TYPE_VOID { $$ = new VoidType(); }
-  | T_TYPE_REF type { $$ = new RefType(true); }
-  | T_TYPE_NOALIAS T_TYPE_REF type { $$ = new RefType(false); }
+  | T_TYPE_REF type { $$ = new RefType(true, $2); }
+  | T_TYPE_NOALIAS T_TYPE_REF type { $$ = new RefType(false, $3); }
   ;
 
 varid:
-  T_VARID { }
+  T_VARID { $$ = new ExistingVarNode($1); }
   ;
 
 globid:
-  T_IDENT { }
+  T_IDENT { $$ = new ExistingFuncNode($1); }
   ;
 
 lit:
-  T_INT_LITERAL {  }
-  | T_FLOAT_LITERAL {  }
-  | T_BOOL_FALSE_LITERAL {  }
-  | T_BOOL_TRUE_LITERAL {  }
+  T_INT_LITERAL { $$ = Int; }
+  | T_FLOAT_LITERAL { $$ = Float; }
+  | T_BOOL_FALSE_LITERAL { $$ = False; }
+  | T_BOOL_TRUE_LITERAL { $$ = True; }
   ;
 
 
-slit:
-  T_STRING_LITERAL { }
-  ;
+//slit:
+//  T_STRING_LITERAL { }
+//  ;
 
 %%
 
@@ -283,7 +305,7 @@ int main(int argc, char ** argv) {
   yyparse(&root);
   
   // Print the AST Tree
-  root->PrintRecursive();
+  root->PrintRecursive(0);
 }
 
 void yyerror(const char *s) {

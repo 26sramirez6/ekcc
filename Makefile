@@ -8,6 +8,7 @@ valgrind: clean ekcc
 
 ekcc: Lexer.o Parser.o Expression.o
 	$(CC) $(CFLAGS) $^ -lfl -o $@
+	./ekcc > ekcc.out
 
 Expression.o: Expression.cpp
 	$(CC) $(CFLAGS) -c $< -o $@
