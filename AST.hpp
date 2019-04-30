@@ -10,38 +10,38 @@
 #include<vector>
 #include<iostream>
 #include<string>
+#include<utility>
 #include "ValidTypes.hpp"
 using std::cout;
 using std::endl;
 using std::vector;
 using std::string;
+using std::move;
+
 
 struct ASTNode {
-	vector<ASTNode> children;
-	string astName;
+	vector<ASTNode *> children_;
+	string astName_;
 	virtual void Print();
 	virtual ~ASTNode();
-	virtual void Build();
 };
 
-struct ProgramNode : public ASTNode {
 
-	void
-	Build(ASTNode externs, ASTNode funcs) {
-		this->children.push_back(externs);
-		this->children.push_back(funcs);
+struct ProgramNode : public ASTNode {
+	ProgramNode(ASTNode * funcNodes) {
+		this->children_.push_back(funcNodes);
 	}
 
-	void
-	Build(ASTNode funcs) {
-		this->children.push_back(funcs);
+	ProgramNode(ASTNode * externs, ASTNode * funcNodes) {
+		this->children_.push_back(externs);
+		this->children_.push_back(funcNodes);
 	}
 
 	void
 	Print() {
 		cout << "name: prog" << endl;
-		for (auto node: this->children) {
-			node.Print();
+		for (auto node: this->children_) {
+			node->Print();
 		}
 	}
 };
@@ -55,7 +55,16 @@ struct FuncNode : public ASTNode {
 };
 
 struct FuncsNode : public ASTNode {
+	FuncsNode(FuncNode * funcNode) {
+		this->children_.push_back(funcNode);
+	}
 
+	FuncsNode(FuncsNode * funcsNode, FuncNode * funcNode) {
+		for (auto node : funcsNode->children_) {
+			this->children_.push_back(node);
+		}
+		this->children_.push_back(funcNode);
+	}
 };
 
 struct VariableNode : public ASTNode {

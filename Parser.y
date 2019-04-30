@@ -50,6 +50,11 @@
   ExternFunction externFunction;
 
   ASTNode * node;
+  FuncNode * funcNode;
+  FuncsNode * funcsNode;
+  ExternNode * externNode;
+  ExternsNode * externsNode;
+  VariableNode * variableNode;
   SExpression *expression;
 }
 
@@ -110,17 +115,19 @@
 %token T_ASSIGN "="
 
 // declare types
-%type <node> funcs
-%type <node> externs
-%type <node> vdecl
+%type <funcsNode> funcs
+%type <externsNode> externs
+%type <variableNode> vdecl
+%type <funcNode> func
+%type <externNode> extern
 
-%parse-param { ASTNode * root }
+%parse-param { ProgramNode ** root }
 
 %%
 
 prog:
-  funcs { root->Build($1); }
-  | externs funcs { root->Build($1, $2); }
+  funcs { $$ = new ProgramNode($1); (*root) = $$; }
+  | externs funcs { $$ = new ProgramNode($1, $2); (*root) = $$; }
   ;
 
 externs:
@@ -129,19 +136,19 @@ externs:
   ;
 
 extern:
-  T_FUNCTION_EXTERN type globid "(" ")" ";" { cout << "name: extern" << endl; }
-  | T_FUNCTION_EXTERN type globid "(" tdecls ")" ";" { cout << "name: extern" << endl; }
+  T_FUNCTION_EXTERN type globid "(" ")" ";" { $$ = new ExternNode() }
+  | T_FUNCTION_EXTERN type globid "(" tdecls ")" ";" { $$ = new ExternNode() }
   ;
 
 funcs:
-  func {}
-  | func funcs { cout << "name: funcs" << endl; } //push_back funcs
+  func { $$ = new FuncsNode($1); }
+  | funcs func { $$ = new FuncsNode($1, $2); }
   ;
 
 func:
-  T_FUNCTION_DEF type globid "(" ")" blk { cout << "name: func" << endl; }
-  | T_FUNCTION_DEF type globid "(" vdecls ")" blk { cout << "name: func" << endl; }
-  | T_FUNCTION_DEF type T_FUNCTION_RUN "("")" blk { cout << "name: func" << endl; }
+  T_FUNCTION_DEF type globid "(" ")" blk { $$ = new FuncNode() }
+  | T_FUNCTION_DEF type globid "(" vdecls ")" blk { $$ = new FuncNode() }
+  | T_FUNCTION_DEF type T_FUNCTION_RUN "("")" blk { $$ = new FuncNode() }
   ;
 
 blk:
@@ -265,7 +272,7 @@ int main(int, char**) {
   ProgramNode * root = new ProgramNode();
   
   // Parse through the input:
-  yyparse(root);
+  yyparse(&root);
   
   // Print the AST Tree
   root->Print();
