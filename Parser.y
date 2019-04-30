@@ -4,6 +4,7 @@
     #include <iostream>
     #include "Expression.h"
     #include "ValidTypes.hpp"
+    #include "AST.hpp"
     #include "Lexer.hpp"
     #include "Parser.hpp"
     #include "AST.hpp"
@@ -104,13 +105,19 @@
 %token T_EQ "=="
 // declare unary
 %token T_NEG "!"
-
 %token T_ASSIGN "="
+
+%parse-param { ASTNode **root }
+
 %%
 
 prog:
-  funcs { cout << "name: prog" << endl; }
-  | externs funcs { cout << "name: prog" << endl; }
+  funcs { 
+  	root->Build($1);
+	}
+  | externs funcs { 
+  	root->Build($1, $2);
+  	}
   ;
 
 externs:
@@ -205,7 +212,11 @@ tdecls:
   ;
 
 vdecl:
-  type T_VARID { cout << "vedcl: " << $2 << endl;}
+  type T_VARID { 
+  	cout << "vedcl: " << $2 << endl;
+  	VariableNode node($1, $2);
+  	$$ = node;
+  	}
   ;
 
 type:
@@ -242,7 +253,7 @@ slit:
 
 int main(int, char**) {
   // open a file handle to a particular file:
-  FILE *myfile = fopen("test1.ek", "r");
+  FILE *myfile = fopen("test_simple.ek", "r");
   // make sure it's valid:
   if (!myfile) {
     cout << "I can't open file!" << endl;
@@ -251,8 +262,14 @@ int main(int, char**) {
   // Set flex to read from it instead of defaulting to STDIN:
   yyin = myfile;
 
+  // Set up the root tree
+  ProgramNode * root = new ProgramNode();
+  
   // Parse through the input:
-  yyparse();
+  yyparse(&root);
+  
+  // Print the AST Tree
+  root.Print();
 }
 
 void yyerror(const char *s) {
