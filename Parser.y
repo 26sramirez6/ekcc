@@ -14,7 +14,9 @@
     extern int yyparse();
     extern FILE *yyin;
   
-    void yyerror(const char *s);
+    void yyerror(ASTNode * node, const char *s) {
+    	
+    }
 
 %}
 
@@ -266,7 +268,7 @@ int main(int, char**) {
   yyparse(root);
   
   // Print the AST Tree
-  root.Print();
+  root->Print();
 }
 
 void yyerror(const char *s) {

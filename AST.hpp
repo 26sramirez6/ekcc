@@ -21,6 +21,7 @@ struct ASTNode {
 	string astName;
 	virtual void Print();
 	virtual ~ASTNode();
+	virtual void Build();
 };
 
 struct ProgramNode : public ASTNode {

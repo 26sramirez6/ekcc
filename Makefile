@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS= -Wall -Werror -Wextra -g -std=c++11 -Wno-deprecated-register -Wno-unused-parameter -Wno-unneeded-internal-declaration -Wno-unused-function
+CFLAGS= -Wall -g -std=c++11 #-Werror -Wextra -Wno-deprecated-register -Wno-unused-parameter -Wno-unneeded-internal-declaration -Wno-unused-function -Wno-sign-compare 
 
 all: clean ekcc
 
