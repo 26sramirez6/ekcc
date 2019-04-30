@@ -213,11 +213,7 @@ tdecls:
   ;
 
 vdecl:
-  type T_VARID { 
-  	cout << "vedcl: " << $2 << endl;
-  	VariableNode node($1, $2);
-  	$$ = node;
-  	}
+  type T_VARID { cout << "vedcl: " << $2 << endl; }
   ;
 
 type:
