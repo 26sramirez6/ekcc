@@ -6,22 +6,25 @@
 using std::cout;
 using std::endl;
 
-struct IntType {
+struct ValidType {
 };
 
-struct FloatType {
+struct IntType : public ValidType {
 };
 
-struct CintType {
+struct FloatType : public ValidType {
 };
 
-struct BoolType {
+struct CintType : public ValidType {
 };
 
-struct VoidType {
+struct BoolType : public ValidType {
 };
 
-struct RefType {
+struct VoidType : public ValidType {
+};
+
+struct RefType : public ValidType {
     bool noAlias_;
     void
     Init(char * line) {

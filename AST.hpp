@@ -1,33 +1,70 @@
-// class ASTNode {
-// 	std::String disc;
-// 	std::Vector<ASTNode*> Children;
-// 	ASTNode() { }
-	
-// 	virtual outputYAML(int indentLevel, std::ostream) = 0;}
+/*
+ * AST.hpp
+ *
+ *  Created on: Apr 29, 2019
+ *      Author: 26sra
+ */
 
-// class outputJSON
+#ifndef EKCC_AST_HPP_
+#define EKCC_AST_HPP_
+#include<vector>
+#include<iostream>
+#include<string>
+#include "ValidTypes.hpp"
+using std::cout;
+using std::endl;
+using std::vector;
+using std::string;
 
-// class ASTNode("")
+struct ASTNode {
+	vector<ASTNode> children;
+	string astName;
+	virtual void Print();
+	virtual ~ASTNode();
+};
 
-// class BinOpNode : public ASTNode { 
-// 	Children.push_back(left)
-// 	Children.push_back(right)
-// 	OP = theop;}
-// 	virtual outputYAML(int level){}
+struct ProgramNode : public ASTNode {
 
-// BinOpNode(char OP, ASTNode* Left, ASTNode *Right){ }
+	void
+	Build(ASTNode externs, ASTNode funcs) {
+		this->children.push_back(externs);
+		this->children.push_back(funcs);
+	}
 
-// virtual void outputYAML(int level, …outfile){ outfile << <<;
-// for(auto child:children)
-// 	child -> outputYAML(level +1, outfile);
-// }
-// }
+	void
+	Build(ASTNode funcs) {
+		this->children.push_back(funcs);
+	}
 
-// exp:
-// 	node '+' node {$$ = new EXPNode ("Add", $1, $3) }
+	void
+	Print() {
+		cout << "name: prog" << endl;
+		for (auto node: this->children) {
+			node.Print();
+		}
+	}
+};
 
-// node:
-// 	| INT {$$ = new ASTNode()}
+struct ExternNode : public ASTNode {
+
+};
+
+struct FuncNode : public ASTNode {
+
+};
+
+struct FuncsNode : public ASTNode {
+
+};
+
+struct VariableNode : public ASTNode {
+	string identifier_;
+	ValidType type_;
+	static string astName = std::string("vardeclstmt");
+	VariableNode(ValidType type, string identifier) : type_(type), identifier_(identifier){
+
+	}
+};
 
 
-// JSON v1.0 is subset of YAML
+#endif /* EKCC_AST_HPP_ */
