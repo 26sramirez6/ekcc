@@ -6,6 +6,7 @@
     #include "ValidTypes.hpp"
     #include "Lexer.hpp"
     #include "Parser.hpp"
+    #include "AST.hpp"
     using namespace std;
     // stuff from flex that bison needs to know about:
     extern int yylex();
@@ -76,8 +77,8 @@
 %token <defFunction> T_FUNCTION_DEF
 %token <externFunction> T_FUNCTION_EXTERN 
 
-%token T_IDENT
-%token <variable> T_VARID
+%token <sval> T_IDENT
+%token <sval> T_VARID
 
 // declare symbols
 %token T_LBRACE "{"
@@ -105,98 +106,92 @@
 %token T_NEG "!"
 
 %token T_ASSIGN "="
-
-// %type <expression> expr
-
-// %left "+"
-// %left "*"
-
 %%
 
 prog:
-  funcs { cout << "the end of file" << endl;}
-  | externs funcs { cout << "the end of file" << endl;}
+  funcs { cout << "name: prog" << endl; }
+  | externs funcs { cout << "name: prog" << endl; }
   ;
 
 externs:
-  extern {}
-  | extern externs {}
+  extern { cout << "name: externs" << endl; }
+  | extern externs { cout << "name: externs" << endl; } //push_back extern
   ;
 
 extern:
-  T_FUNCTION_EXTERN type globid "(" ")" ";" {}
-  | T_FUNCTION_EXTERN type globid "(" tdecls ")" ";" {}
+  T_FUNCTION_EXTERN type globid "(" ")" ";" { cout << "name: extern" << endl; }
+  | T_FUNCTION_EXTERN type globid "(" tdecls ")" ";" { cout << "name: extern" << endl; }
   ;
 
 funcs:
   func {}
-  | func funcs {}
+  | func funcs { cout << "name: funcs" << endl; } //push_back funcs
   ;
 
 func:
-  T_FUNCTION_DEF type globid "(" ")" blk {}
-  | T_FUNCTION_DEF type globid "(" vdecls ")" blk {}
-  | T_FUNCTION_DEF type T_FUNCTION_RUN "("")" blk {}
+  T_FUNCTION_DEF type globid "(" ")" blk { cout << "name: func" << endl; }
+  | T_FUNCTION_DEF type globid "(" vdecls ")" blk { cout << "name: func" << endl; }
+  | T_FUNCTION_DEF type T_FUNCTION_RUN "("")" blk { cout << "name: func" << endl; }
   ;
 
 blk:
-  "{" "}" {}
-  | "{" stmts "}" {}
+  "{" "}" { cout << "name: bloc" << endl; }
+  | "{" stmts "}" { cout << "name: bloc" << endl; }
   ; 
 
 stmts:
   stmt {}
-  | stmt stmts {}
+  | stmt stmts { cout << "name: stmts" << endl; }
   ;
 
 stmt:
-  blk {}
-  | T_CONTROL_RETURN ";" {}
-  | T_CONTROL_RETURN exp ";" {}
-  | vdecl "=" exp ";" {}
-  | exp ";" {}
-  | T_CONTROL_WHILE "(" exp ")" stmt {}
-  | T_CONTROL_IF "(" exp ")" stmt {}
-  | T_CONTROL_IF "(" exp ")" stmt  T_CONTROL_ELSE stmt {}
-  | T_FUNCTION_PRINT exp ";" {}
-  | T_FUNCTION_PRINT slit ";" {}
+  blk { cout << "name: stmt" << endl; }
+  | T_CONTROL_RETURN ";" { cout << "name: return_stmt" << endl; }
+  | T_CONTROL_RETURN exp ";" { cout << "name: return_stmt" << endl; }
+  | vdecl "=" exp ";" { cout << "name: assign_stmt" << endl; }
+  | exp ";" { cout << "name: stmt" << endl; }
+  | T_CONTROL_WHILE "(" exp ")" stmt { cout << "name: while_stmt" << endl; }
+  | T_CONTROL_IF "(" exp ")" stmt { cout << "name: if_stmt" << endl; }
+  | T_CONTROL_IF "(" exp ")" stmt  T_CONTROL_ELSE stmt { cout << "name: if_else_stmt" << endl; }
+  | T_FUNCTION_PRINT exp ";" { cout << "name: print_stmt" << endl; }
+  | T_FUNCTION_PRINT slit ";" { cout << "name: print_stmt" << endl; }
   ;
 
 exp:
-  "(" exp ")" {}
-  | binop {}
-  | uop {}
-  | lit {}
-  | varid {}
-  | globid "(" ")" {}
-  | globid "(" exp ")" {}
+  "(" exp ")" { cout << "exp" << endl; }
+  | binop { cout << "exp" << endl; }
+  | uop { cout << "exp" << endl; }
+  | lit { cout << "exp" << endl; }
+  | varid { cout << "exp" << endl; }
+  | globid "(" ")" { cout << "exp" << endl; }
+  | globid "(" exp ")" { cout << "exp" << endl; }
   ;
 
 binop:
-  arithops {}
-  | logicops {}
-  | varid "=" exp {}
-  | "[" type "]" exp {}
+  arithops { cout << "binop" << endl; }
+  | logicops { cout << "binop" << endl; }
+  | varid "=" exp { cout << "binop" << endl; }
+  | "[" type "]" exp { cout << "binop" << endl; }
   ;
 
 arithops:
-  exp "*" exp {}
-  | exp "/" exp {}
-  | exp "+" exp {}
-  | exp "-" exp {}
+  exp "*" exp { cout << "arithops" << endl; }
+  | exp "/" exp { cout << "arithops" << endl; }
+  | exp "+" exp { cout << "arithops" << endl; }
+  | exp "-" exp { cout << "arithops" << endl; }
   ;
 
 logicops:
-  exp "==" exp {}
-  | exp "<" exp {}
-  | exp ">" exp {}
-  | exp "&&" exp {}
-  | exp "||" exp {}
+  exp "==" exp { cout << "logicops" << endl; }
+  | exp "<" exp { cout << "logicops" << endl; }
+  | exp ">" exp { cout << "logicops" << endl; }
+  | exp "&&" exp { cout << "logicops" << endl; }
+  | exp "||" exp { cout << "logicops" << endl; }
   ;
 
 uop:
-  "!" exp {}
-  | "-" exp {}
+  "!" exp { cout << "uop" << endl; }
+  | "-" exp { cout << "uop" << endl; }
   ;
 
 vdecls:
@@ -206,41 +201,41 @@ vdecls:
 
 tdecls:
   type
-  | type "," tdecls {}
+  | type "," tdecls { cout << "tdecls" << endl; }
   ;
 
 vdecl:
-  type T_VARID { cout << "parser_vdecl" << endl;}
+  type T_VARID { cout << "vedcl: " << $2 << endl;}
   ;
 
 type:
-  T_TYPE_INT { cout << "parser_type: int" << endl; }
-  | T_TYPE_CINT {}
-  | T_TYPE_FLOAT { cout << "parser_control: if" << endl;}
-  | T_TYPE_BOOL {}
-  | T_TYPE_VOID {}
-  | T_TYPE_REF type { cout << "parser_ref" << endl; }
-  | T_TYPE_NOALIAS T_TYPE_REF type { cout << "parser_nolias ref" << endl; }
+  T_TYPE_INT { cout << "int_type" << endl; }
+  | T_TYPE_CINT { cout << "cint_type" << endl; }
+  | T_TYPE_FLOAT { cout << "float_type" << endl; }
+  | T_TYPE_BOOL { cout << "bool_type" << endl; }
+  | T_TYPE_VOID { cout << "void_type" << endl; }
+  | T_TYPE_REF type { cout << "ref_type" << endl; }
+  | T_TYPE_NOALIAS T_TYPE_REF type { cout << "noalas_ref" << endl; }
   ;
 
 varid:
-  T_VARID { cout << "parser_variable" << endl;}
+  T_VARID { cout << "varid: " << $1 << endl;}
   ;
 
 globid:
-  T_IDENT {}
+  T_IDENT { cout << "indentifier: " << $1 << endl; }
   ;
 
 lit:
-  T_INT_LITERAL {}
-  | T_FLOAT_LITERAL {}
-  | T_BOOL_FALSE_LITERAL {}
-  | T_BOOL_TRUE_LITERAL {}
+  T_INT_LITERAL { cout << "int: " << $1 << endl; }
+  | T_FLOAT_LITERAL { cout << "float: " << $1 << endl; }
+  | T_BOOL_FALSE_LITERAL { cout << "bool: false" << endl; }
+  | T_BOOL_TRUE_LITERAL { cout << "bool: true" << endl; }
   ;
 
 
 slit:
-  T_STRING_LITERAL {}
+  T_STRING_LITERAL { cout << "string: " << $1 << endl; }
   ;
 
 %%
