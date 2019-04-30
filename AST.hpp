@@ -21,17 +21,20 @@ using std::move;
 
 struct ASTNode {
 	vector<ASTNode *> children_;
+	unsigned depth_ = 0;
+
 	virtual void
-	PrintRecursive() {
-		PrintSelf();
+	PrintRecursive(unsigned depth) {
+		PrintSelf(depth);
 		for (auto node: this->children_) {
-			node->PrintRecursive();
+			node->PrintRecursive(depth+1);
 		}
 	};
 
 	virtual void
-	PrintSelf() {
-		cout << "name: " << GetName() << endl;
+	PrintSelf(unsigned depth) {
+		string left = std::string(depth*2, ' ');
+		cout << left << "name: " << GetName() << endl;
 	};
 
 	virtual string
@@ -45,19 +48,26 @@ struct ASTNode {
 
 
 struct ProgramNode : public ASTNode {
-	ProgramNode(ASTNode * funcNodes) {
-		this->children_.push_back(funcNodes);
+	ProgramNode(ASTNode * funcsNode) {
+		this->children_.push_back(funcsNode);
 	}
 
-	ProgramNode(ASTNode * externs, ASTNode * funcNodes) {
+	ProgramNode(ASTNode * externs, ASTNode * funcsNode) {
+		this->children_.push_back(funcsNode);
 		this->children_.push_back(externs);
-		this->children_.push_back(funcNodes);
 	}
 
 	string
 	GetName() {
 		return string("prog");
 	}
+
+	virtual void
+	PrintSelf(unsigned depth) {
+		string left = std::string(depth*2, ' ');
+		cout << left << "---" << endl;
+		cout << left << "name: " << GetName() << endl;
+	};
 };
 
 struct ExternNode : public ASTNode {
@@ -72,6 +82,26 @@ struct ExternsNode : public ASTNode {
 	GetName() {
 		return string("externs");
 	}
+
+	void
+	PrintSelf(unsigned depth) {
+		string left1 = std::string((depth-1)*2, ' ');
+		string left2 = std::string(depth*2, ' ');
+		string left3 = std::string((depth+1)*2, ' ');
+		cout << left1 << "externs:" << endl;
+		cout << left2 << "name: externs" << endl;
+		cout << left2 << "externs:" << endl;
+		cout << left3 << "-" << endl;
+	}
+
+	virtual void
+	PrintRecursive(unsigned depth) {
+		PrintSelf(depth);
+		for (auto node: this->children_) {
+			node->PrintRecursive(depth+2);
+		}
+	};
+
 };
 
 struct FuncNode : public ASTNode {
@@ -95,6 +125,14 @@ struct FuncNode : public ASTNode {
 	GetName() {
 		return string("func");
 	}
+
+	void
+	PrintSelf(unsigned depth) {
+		string left = std::string(depth*2, ' ');
+		cout << left << "name: " << this->GetName() << endl;
+		cout << left << "retType: " << this->retType_->GetName() << endl;
+		cout << left << "globid: " << this->identifier_ << endl;
+	};
 };
 
 struct FuncsNode : public ASTNode {
@@ -114,12 +152,39 @@ struct FuncsNode : public ASTNode {
 		return string("funcs");
 	}
 
+	void
+	PrintSelf(unsigned depth) {
+		string left1 = std::string((depth-1)*2, ' ');
+		string left2 = std::string(depth*2, ' ');
+		string left3 = std::string((depth+1)*2, ' ');
+		cout << left1 << "funcs:" << endl;
+		cout << left2 << "name: funcs" << endl;
+		cout << left2 << "funcs:" << endl;
+		cout << left3 << "-" << endl;
+	}
+
+	virtual void
+	PrintRecursive(unsigned depth) {
+		PrintSelf(depth);
+		for (auto node: this->children_) {
+			node->PrintRecursive(depth+2);
+		}
+	};
+
 };
 
 struct BlockNode: public ASTNode {
 	string
 	GetName() {
 		return string("blk");
+	}
+
+	void
+	PrintSelf(unsigned depth) {
+		string left1 = std::string((depth-1)*2, ' ');
+		string left2 = std::string(depth*2, ' ');
+		cout << left1 << "blk:" << endl;
+		cout << left2 << "name: blk" << endl;
 	}
 };
 
@@ -151,6 +216,25 @@ struct VdeclsNode : public ASTNode {
 	GetName() {
 		return string("vdecls");
 	}
+
+	void
+	PrintSelf(unsigned depth) {
+		string left1 = std::string((depth-1)*2, ' ');
+		string left2 = std::string(depth*2, ' ');
+		string left3 = std::string((depth+1)*2, ' ');
+		cout << left1 << "vdecls:" << endl;
+		cout << left2 << "name: vdecls" << endl;
+		cout << left2 << "vars:" << endl;
+		cout << left3 << "-" << endl;
+	}
+
+	virtual void
+	PrintRecursive(unsigned depth) {
+		PrintSelf(depth);
+		for (auto node: this->children_) {
+			node->PrintRecursive(depth+2);
+		}
+	};
 };
 
 #endif /* EKCC_AST_HPP_ */
