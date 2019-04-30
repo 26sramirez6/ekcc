@@ -47,7 +47,7 @@
   ExternFunction externFunction;
 
   Variable variable;
-
+  ASTNode * node;
   SExpression *expression;
 }
 
@@ -107,17 +107,18 @@
 %token T_NEG "!"
 %token T_ASSIGN "="
 
+// declare types
+%type <node> funcs
+%type <node> externs
+%type <node> vdecl
+
 %parse-param { ASTNode **root }
 
 %%
 
 prog:
-  funcs { 
-  	root->Build($1);
-	}
-  | externs funcs { 
-  	root->Build($1, $2);
-  	}
+  funcs { root->Build($1); }
+  | externs funcs { root->Build($1, $2); }
   ;
 
 externs:
