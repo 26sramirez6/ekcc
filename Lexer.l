@@ -9,6 +9,7 @@
 
 %%
 [ \t\n]           { continue; }
+"#".*             { continue; }
 "int"             { return T_TYPE_INT; }
 "float"           { return T_TYPE_FLOAT; }
 "bool"            { return T_TYPE_BOOL; }
