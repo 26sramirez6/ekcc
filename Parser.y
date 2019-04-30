@@ -47,7 +47,7 @@
 //  DefFunction defFunction;
 //  ExternFunction externFunction;
   
-  LiteralTypes literalType;
+  Literal * literal;
   ControlFlow * controlFlow;
   ValidType * validType;
   ASTNode * node;
@@ -63,7 +63,10 @@
   StatementsNode * statementsNode;
   ExpressionNode * expressionNode;
   ExpressionsNode * expressionsNode;
-  OperationNode * operationNode;
+  BinaryOperationNode * binaryOperationNode;
+  UnaryOperationNode * unaryOperationNode;
+  ExistingVarNode * existingVarNode;
+  ExistingFuncNode * existingFuncNode;
 }
 
 // declare literals
@@ -123,7 +126,7 @@
 %token T_ASSIGN "="
 
 // declare types
-%type <literalType> lit
+%type <literal> lit
 %type <validType> type
 %type <programNode> prog
 %type <funcsNode> funcs
@@ -138,10 +141,12 @@
 %type <statementNode> stmt
 %type <expressionsNode> exps
 %type <expressionNode> exp
-%type <operationNode> binop
-%type <operationNode> arithops
-%type <operationNode> logicops
-%type <operationNode> uop
+%type <binaryOperationNode> binop
+%type <binaryOperationNode> arithops
+%type <binaryOperationNode> logicops
+%type <unaryOperationNode> uop
+%type <existingVarNode> varid
+%type <existingFuncNode> globid
 
 
 %parse-param { ProgramNode ** root }
@@ -217,28 +222,28 @@ exp:
 binop:
   arithops { $$ = $1; }
   | logicops { $$ = $1; }
-  | varid "=" exp { $$ = new OperationNode(Assign, $1, $3); }
-  | "[" type "]" exp { $$ = new OperationNode(Cast, $2, $4); }
+  | varid "=" exp { $$ = new BinaryOperationNode(Assign, $1, $3); }
+  | "[" type "]" exp { $$ = new BinaryOperationNode(Cast, $2, $4); }
   ;
 
 arithops:
-  exp "*" exp { $$ = new OperationNode(Multiply, $1, $3); }
-  | exp "/" exp { $$ = new OperationNode(Divide, $1, $3); }
-  | exp "+" exp { $$ = new OperationNode(Add, $1, $3);  }
-  | exp "-" exp { $$ = new OperationNode(Subtract, $1, $3); }
+  exp "*" exp { $$ = new BinaryOperationNode(Multiply, $1, $3); }
+  | exp "/" exp { $$ = new BinaryOperationNode(Divide, $1, $3); }
+  | exp "+" exp { $$ = new BinaryOperationNode(Add, $1, $3);  }
+  | exp "-" exp { $$ = new BinaryOperationNode(Subtract, $1, $3); }
   ;
 
 logicops:
-  exp "==" exp { $$ = new OperationNode(Equality, $1, $3); }
-  | exp "<" exp { $$ = new OperationNode(LessThan, $1, $3); }
-  | exp ">" exp { $$ = new OperationNode(GreaterThan, $1, $3); }
-  | exp "&&" exp { $$ = new OperationNode(Land, $1, $3); }
-  | exp "||" exp { $$ = new OperationNode(Lor, $1, $3); }
+  exp "==" exp { $$ = new BinaryOperationNode(Equality, $1, $3); }
+  | exp "<" exp { $$ = new BinaryOperationNode(LessThan, $1, $3); }
+  | exp ">" exp { $$ = new BinaryOperationNode(GreaterThan, $1, $3); }
+  | exp "&&" exp { $$ = new BinaryOperationNode(Land, $1, $3); }
+  | exp "||" exp { $$ = new BinaryOperationNode(Lor, $1, $3); }
   ;
 
 uop:
-  "!" exp { $$ = new OperationNode(Negate, $2); }
-  | "-" exp { $$ = new OperationNode(Negative, $2); }
+  "!" exp { $$ = new UnaryOperationNode(Not, $2); }
+  | "-" exp { $$ = new UnaryOperationNode(Minus, $2); }
   ;
 
 vdecls:
@@ -274,10 +279,10 @@ globid:
   ;
 
 lit:
-  T_INT_LITERAL { $$ = Int; }
-  | T_FLOAT_LITERAL { $$ = Float; }
-  | T_BOOL_FALSE_LITERAL { $$ = False; }
-  | T_BOOL_TRUE_LITERAL { $$ = True; }
+  T_INT_LITERAL { $$ = new Literal($1); }
+  | T_FLOAT_LITERAL { $$ = new Literal($1); }
+  | T_BOOL_FALSE_LITERAL { $$ = new Literal(false); }
+  | T_BOOL_TRUE_LITERAL { $$ = new Literal(true); }
   ;
 
 

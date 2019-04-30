@@ -68,9 +68,16 @@ struct RefType : public ValidType {
 };
 
 
-enum ControlTypes { Empty, If, IfElse, While, Return };
+enum ControlTypes {
+	Empty,
+	If,
+	IfElse,
+	While,
+	Return
+};
+
 struct ControlFlow {
-	ControlTypes controlType_ = Empty;
+	ControlTypes controlType_ = EmptyControl;
 };
 
 struct IfControl: ControlFlow {
@@ -90,14 +97,53 @@ struct ReturnControl : ControlFlow {
 };
 
 enum LiteralTypes {
+	EmptyLiteral,
 	String,
 	Int,
 	Float,
-	False,
-	True
+	Boolean
+};
+
+union LiteralValue {
+	int iValue_ = 0;
+	float fValue_ = 0.;
+	string sValue_;
+	bool bValue_ = false;
+};
+
+struct Literal {
+	LiteralTypes type_ = EmptyLiteral;
+	string name_;
+	LiteralValue value_;
+	Literal(int value) : type_(Int), name_("ilit") {
+		this->value_.iValue_ = value;
+	}
+
+	Literal(float value) : type_(Float), name_("flit") {
+		this->value_.fValue_ = value;
+	}
+
+	Literal(string value) : type_(String), name_("slit") {
+		this->value_.sValue_ = value;
+	}
+
+	Literal(bool value) : type_(Boolean), name_("blit") {
+		this->value_.bValue_ = value;
+	}
+
+	string
+	GetName() {
+		return this->name_;
+	}
+
+	LiteralValue
+	GetValue() {
+		return this->value_;
+	}
 };
 
 enum OperationTypes {
+	EmptyOperation,
 	Assign,
 	Cast,
 	Multiply,
@@ -105,12 +151,12 @@ enum OperationTypes {
 	Add,
 	Subtract,
 	Equality,
-	Lessthan,
+	LessThan,
 	GreaterThan,
 	Land,
 	Lor,
-	Negate,
-	Negative
+	Not,
+	Minus
 };
 //struct LiteralType {
 //	LiteralTypes type_;

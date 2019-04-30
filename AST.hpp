@@ -201,17 +201,59 @@ struct ExistingVarNode: public ASTNode {
 	string identifier_;
 	ExistingVarNode(string identifier) :
 	identifier_(identifier) {}
+
+	void
+	PrintRecursive(unsigned depth) {
+		string left1 = std::string(depth*2, ' ');
+		cout << left1 << "name: varval" << endl;
+		cout << left1 << "var: " << this->identifier_ << endl;
+	}
 };
+
 
 struct ExistingFuncNode: public ASTNode {
 	string identifier_;
 	ExistingFuncNode(string identifier) :
 	identifier_(identifier) {}
+
+	void
+	PrintRecursive(unsigned depth) {
+		string left1 = std::string(depth*2, ' ');
+		cout << left1 << "name: funccall" << endl;
+		cout << left1 << "globid: " << this->identifier_ << endl;
+	}
+
 };
 
-struct OperationNode: public ASTNode {
+
+struct UnaryOperationNode: public ASTNode {
 	OperationTypes operationType_;
-	OperationNode(OperationTypes operationType,
+	UnaryOperationNode(OperationTypes operationType,
+		ASTNode * expressionNode1) :
+		operationType_(operationType) {
+		this->children_.push_back(expressionNode1);
+	}
+
+	void
+	PrintRecursive(unsigned depth) {
+		string left1 = std::string(depth*2, ' ');
+		cout << left1 << "name: uop" << endl;
+		cout << left1 << "op: ";
+		switch (this->operationType_) {
+		case Not:
+			cout << "not" << endl;
+			break;
+		case Minus:
+			cout << "minus" << endl;
+			break;
+		this->children_[0]->PrintRecursive(depth+1);
+		}
+	}
+};
+
+struct BinaryOperationNode: public ASTNode {
+	OperationTypes operationType_;
+	BinaryOperationNode(OperationTypes operationType,
 		ASTNode * expressionNode1,
 		ASTNode * expressionNode2) :
 		operationType_(operationType) {
@@ -219,25 +261,145 @@ struct OperationNode: public ASTNode {
 		this->children_.push_back(expressionNode2);
 	}
 
-	OperationNode(OperationTypes operationType,
-		ASTNode * expressionNode1) :
-		operationType_(operationType) {
-		this->children_.push_back(expressionNode1);
+	void
+	PrintRecursive(unsigned depth) {
+		string left1 = std::string(depth*2, ' ');
+		cout << left1 << "name: binop" << endl;
+		cout << left1 << "op: ";
+		switch (this->operationType_) {
+		case Assign:
+			cout << "assign" << endl;
+			break;
+		case Cast:
+			cout << "cast" << endl;
+			break;
+		case Multiply:
+			cout << "mul" << endl;
+			break;
+		case Divide:
+			cout << "div" << endl;
+			break;
+		case Add:
+			cout << "add" << endl;
+			break;
+		case Subtract:
+			cout << "sub" << endl;
+			break;
+		case Equality:
+			cout << "eq" << endl;
+			break;
+		case LessThan:
+			break;
+		case GreaterThan:
+			cout << "gt" << endl;
+			break;
+		case Land:
+			cout << "and" << endl;
+			break;
+		case Lor:
+			cout << "or" << endl;
+			break;
+		cout << "lhs:" << endl;
+		this->children_[0]->PrintRecursive(depth+1);
+		cout << "rhs:" << endl;
+		this->children_[1]->PrintRecursive(depth+1);
+		}
 	}
+
 
 };
 
 struct ExpressionNode: public ASTNode {
-	LiteralTypes literalType_;
-	ExpressionNode(LiteralTypes literalType) : literalType_(literalType) {
+	int constructorCase_ = 0;
+	Literal * literal_ = nullptr;
 
+	ExpressionNode(ExpressionNode * expressionNode) :
+		constructorCase_(0) {
+		this->children_.push_back(expressionNode);
 	}
 
-//	void
-//	PrintRecursive(unsigned depth) {
-//		string left1 = std::string(depth*2, ' ');
-//		cout << left1 << "name: " << this->stmtName_ << endl;
-//	}
+	ExpressionNode(BinaryOperationNode * binaryOperationNode) :
+		constructorCase_(1) {
+		this->children_.push_back(binaryOperationNode);
+	}
+
+	ExpressionNode(UnaryOperationNode * unaryOperationNode) :
+		constructorCase_(2) {
+		this->children_.push_back(unaryOperationNode);
+	}
+
+	ExpressionNode(Literal * literal) :
+		constructorCase_(3), literal_(literal) {}
+
+	ExpressionNode(ExistingVarNode * existingVarNode) :
+		constructorCase_(4) {
+		this->children_.push_back(existingVarNode);
+	}
+
+	ExpressionNode(ExistingFuncNode * existingFuncNode) :
+		constructorCase_(5) {
+		this->children_.push_back(existingFuncNode);
+	}
+
+	ExpressionNode(ExistingFuncNode * existingFuncNode,
+			ASTNode * expressionsNode) :
+		constructorCase_(6) {
+		this->children_.push_back(existingFuncNode);
+		for (auto node : expressionsNode->children_) {
+			this->children_.push_back(node);
+		}
+	}
+
+	void
+	PrintRecursive(unsigned depth) {
+		cout << "exp" << endl;
+		switch (this->constructorCase_) {
+		case 0:
+			this->children_[0]->PrintRecursive(depth+1);
+			break;
+		case 1:
+			this->children_[0]->PrintRecursive(depth+1);
+			break;
+		case 2:
+			this->children_[0]->PrintRecursive(depth+1);
+			break;
+		case 3:
+			string left = std::string(depth*2, ' ');
+			cout << "name: " << left << literal_->GetName() << endl;
+			cout << "value: " << left;
+			LiteralValue lv = literal_->GetValue();
+			switch (literal_->type_) {
+			case Int:
+				cout << lv.iValue_ << endl;
+				break;
+			case Float:
+				cout << lv.fValue_ << endl;
+				break;
+			case Float:
+				cout << lv.fValue_ << endl;
+				break;
+			case String:
+				cout << lv.sValue_ << endl;
+				break;
+			case Boolean:
+				cout << lv.bValue_ << endl;
+				break;
+			}
+			break;
+		case 4:
+			this->children_[0]->PrintRecursive(depth+1);
+			break;
+		case 5:
+			this->children_[0]->PrintRecursive(depth+1);
+			break;
+		case 6:
+			this->children_[0]->PrintRecursive(depth+1);
+			cout << "params:" << endl;
+			this->children_[1]->PrintRecursive(depth+1);
+			break;
+		}
+	}
+
 };
 
 
@@ -269,10 +431,6 @@ struct ExpressionsNode: public ASTNode {
 		}
 	}
 
-};
-
-struct BinaryOperationNode: public ASTNode {
-	BinaryOperationNode() {}
 };
 
 
