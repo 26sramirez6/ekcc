@@ -20,6 +20,7 @@
 
 %code requires {
   #include "ValidTypes.hpp"
+  #include "AST.hpp"
   #include "Expression.h"
 }
 
@@ -46,7 +47,6 @@
   DefFunction defFunction;
   ExternFunction externFunction;
 
-  Variable variable;
   ASTNode * node;
   SExpression *expression;
 }
@@ -112,7 +112,7 @@
 %type <node> externs
 %type <node> vdecl
 
-%parse-param { ASTNode **root }
+%parse-param { ASTNode * root }
 
 %%
 
@@ -263,7 +263,7 @@ int main(int, char**) {
   ProgramNode * root = new ProgramNode();
   
   // Parse through the input:
-  yyparse(&root);
+  yyparse(root);
   
   // Print the AST Tree
   root.Print();
