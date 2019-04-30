@@ -58,13 +58,13 @@ struct FuncsNode : public ASTNode {
 };
 
 struct VariableNode : public ASTNode {
-	string identifier_;
 	ValidType type_;
-	static string astName = std::string("vardeclstmt");
+	string identifier_;
+	static string astName;
 	VariableNode(ValidType type, string identifier) : type_(type), identifier_(identifier){
 
 	}
 };
-
+string VariableNode::astName = "vardeclstmt";
 
 #endif /* EKCC_AST_HPP_ */
