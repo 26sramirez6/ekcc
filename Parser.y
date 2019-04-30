@@ -50,6 +50,7 @@
   ExternFunction externFunction;
 
   ASTNode * node;
+  ProgramNode * prog;
   FuncNode * funcNode;
   FuncsNode * funcsNode;
   ExternNode * externNode;
@@ -115,6 +116,7 @@
 %token T_ASSIGN "="
 
 // declare types
+%type <programNode> prog
 %type <funcsNode> funcs
 %type <externsNode> externs
 %type <variableNode> vdecl
