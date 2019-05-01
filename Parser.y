@@ -67,6 +67,7 @@
   UnaryOperationNode * unaryOperationNode;
   ExistingVarNode * existingVarNode;
   ExistingFuncNode * existingFuncNode;
+  TdeclsNode * tdeclsNode;
 }
 
 // declare literals
@@ -136,7 +137,6 @@
 %type <funcNode> func
 %type <externNode> extern
 %type <blockNode> blk
-%type <sval> globid
 %type <statementsNode> stmts
 %type <statementNode> stmt
 %type <expressionsNode> exps
@@ -147,9 +147,20 @@
 %type <unaryOperationNode> uop
 %type <existingVarNode> varid
 %type <existingFuncNode> globid
-
+%type <tdeclsNode> tdecls
 
 %parse-param { ProgramNode ** root }
+
+%left T_ASSIGN
+%left T_OR
+%left T_AND
+%left T_EQ
+%left T_GT T_LT
+%left T_PLUS T_HYPHEN
+%left T_STAR T_FSLASH
+%right T_NEG
+%nonassoc UMINUS
+%right T_RBRACKET
 
 %%
 
@@ -159,13 +170,17 @@ prog:
   ;
 
 externs:
-  extern { }
-  | extern externs { }
+  extern { $$ = new ExternsNode($1); }
+  | externs extern { $$ = new ExternsNode($1, $2); }
   ;
 
 extern:
-  T_FUNCTION_EXTERN type T_IDENT "(" ")" ";" { $$ = new ExternNode(); }
-  | T_FUNCTION_EXTERN type T_IDENT "(" tdecls ")" ";" { $$ = new ExternNode(); }
+  T_FUNCTION_EXTERN type T_IDENT "(" ")" ";" { 
+	$$ = new ExternNode($2, $3); 
+	}
+  | T_FUNCTION_EXTERN type T_IDENT "(" tdecls ")" ";" { 
+	  $$ = new ExternNode($2, $3, $5); 
+  	}
   ;
 
 funcs:
@@ -206,11 +221,11 @@ stmt:
 
 exps:
   exp { $$ = new ExpressionsNode($1); }
-  | exps "," exp { $$ = new ExpressionsNode($1, $3) }
+  | exps "," exp { $$ = new ExpressionsNode($1, $3); }
   ;
 
 exp:
-  "(" exp ")" { $$ = new ExpressionNode($1); }
+  "(" exp ")" { $$ = new ExpressionNode($2); }
   | binop { $$ = new ExpressionNode($1); }
   | uop { $$ = new ExpressionNode($1); }
   | lit { $$ = new ExpressionNode($1); }
@@ -226,13 +241,6 @@ binop:
   | "[" type "]" exp { $$ = new BinaryOperationNode(Cast, $2, $4); }
   ;
 
-arithops:
-  exp "*" exp { $$ = new BinaryOperationNode(Multiply, $1, $3); }
-  | exp "/" exp { $$ = new BinaryOperationNode(Divide, $1, $3); }
-  | exp "+" exp { $$ = new BinaryOperationNode(Add, $1, $3);  }
-  | exp "-" exp { $$ = new BinaryOperationNode(Subtract, $1, $3); }
-  ;
-
 logicops:
   exp "==" exp { $$ = new BinaryOperationNode(Equality, $1, $3); }
   | exp "<" exp { $$ = new BinaryOperationNode(LessThan, $1, $3); }
@@ -241,9 +249,16 @@ logicops:
   | exp "||" exp { $$ = new BinaryOperationNode(Lor, $1, $3); }
   ;
 
+arithops:
+  exp "*" exp { $$ = new BinaryOperationNode(Multiply, $1, $3); }
+  | exp "/" exp { $$ = new BinaryOperationNode(Divide, $1, $3); }
+  | exp "+" exp { $$ = new BinaryOperationNode(Add, $1, $3);  }
+  | exp "-" exp { $$ = new BinaryOperationNode(Subtract, $1, $3); }
+  ;
+    
 uop:
   "!" exp { $$ = new UnaryOperationNode(Not, $2); }
-  | "-" exp { $$ = new UnaryOperationNode(Minus, $2); }
+  | "-" exp %prec UMINUS{ $$ = new UnaryOperationNode(Minus, $2); }
   ;
 
 vdecls:
@@ -252,8 +267,8 @@ vdecls:
   ;
 
 tdecls:
-  type
-  | type "," tdecls { }
+  type { $$ = new TdeclsNode($1); }
+  | tdecls "," type { $$ = new TdeclsNode($1, $3); }
   ;
 
 vdecl:
@@ -266,8 +281,8 @@ type:
   | T_TYPE_FLOAT { $$ = new FloatType(); }
   | T_TYPE_BOOL { $$ = new BoolType(); }
   | T_TYPE_VOID { $$ = new VoidType(); }
-  | T_TYPE_REF type { $$ = new RefType(true, $2); }
-  | T_TYPE_NOALIAS T_TYPE_REF type { $$ = new RefType(false, $3); }
+  | T_TYPE_REF type { $$ = new RefType(false, $2); }
+  | T_TYPE_NOALIAS T_TYPE_REF type { $$ = new RefType(true, $3); }
   ;
 
 varid:
@@ -284,11 +299,6 @@ lit:
   | T_BOOL_FALSE_LITERAL { $$ = new Literal(false); }
   | T_BOOL_TRUE_LITERAL { $$ = new Literal(true); }
   ;
-
-
-//slit:
-//  T_STRING_LITERAL { }
-//  ;
 
 %%
 

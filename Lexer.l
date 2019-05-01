@@ -34,9 +34,9 @@
 
 \$[a-zA-Z_]+[a-zA-Z0-9_]* { yylval.sval = strdup(yytext); return T_VARID;}
 [a-zA-Z_]+[a-zA-Z0-9_]* { yylval.sval = strdup(yytext); return T_IDENT; }
-\"[^\n"]+\"     { yylval.sval = strdup(yytext); return T_STRING_LITERAL; }
+\"[^\n"]+\"    { yylval.sval = strdup(yytext); return T_STRING_LITERAL; }
 [0-9]+          { yylval.ival = atoi(yytext); return T_INT_LITERAL; }
-[0-9]+\.[0-9]+  { yylval.ival = atof(yytext); return T_FLOAT_LITERAL; }
+[0-9]+\.[0-9]+  { yylval.fval = atof(yytext); return T_FLOAT_LITERAL; }
 
 "*"           { return T_STAR; }
 "+"           { return T_PLUS; }
@@ -58,7 +58,6 @@
 ")"           { return T_RPAREN; }
 "["           { return T_LBRACKET; }
 "]"           { return T_RBRACKET; }
-"#"           { return T_POUND; }
 ","           { return T_COMMA;}
 ";"           { return T_SEMICOLON;}
 %%

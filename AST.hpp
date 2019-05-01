@@ -11,6 +11,7 @@
 #include<iostream>
 #include<string>
 #include<utility>
+#include<assert.h>
 #include "ValidTypes.hpp"
 using std::cout;
 using std::endl;
@@ -21,26 +22,9 @@ using std::move;
 
 struct ASTNode {
 	vector<ASTNode *> children_;
-	unsigned depth_ = 0;
 
 	virtual void
-	PrintRecursive(unsigned depth) {
-		PrintSelf(depth);
-		for (auto node: this->children_) {
-			node->PrintRecursive(depth+1);
-		}
-	};
-
-	virtual void
-	PrintSelf(unsigned depth) {
-		string left = std::string(depth*2, ' ');
-		cout << left << "name: " << GetName() << endl;
-	};
-
-	virtual string
-	GetName() {
-		return "";
-	}
+	PrintRecursive(unsigned depth) {};
 
 	virtual ~ASTNode() {};
 
@@ -57,30 +41,82 @@ struct ProgramNode : public ASTNode {
 		this->children_.push_back(externs);
 	}
 
-	string
-	GetName() {
-		return string("prog");
+	void
+	PrintRecursive(unsigned depth) {
+		cout << "---" << endl;
+		cout << "name: prog" << endl;
+		for (auto node : this->children_) {
+			node->PrintRecursive(depth+1);
+		}
+	};
+};
+
+struct TdeclsNode : public ASTNode {
+	ValidType * paramType_;
+	vector<ValidType *> paramTypes_;
+	TdeclsNode(ValidType * validType):
+		paramType_(validType) {
+		this->paramTypes_.push_back(validType);
 	}
 
-	virtual void
-	PrintSelf(unsigned depth) {
-		string left = std::string(depth*2, ' ');
-		cout << left << "---" << endl;
-		cout << left << "name: " << GetName() << endl;
+	TdeclsNode(TdeclsNode * tdeclsNode, ValidType * validType):
+		paramType_(validType) {
+		for (auto type : tdeclsNode->paramTypes_) {
+			this->paramTypes_.push_back(type);
+		}
+	}
+
+	void
+	PrintRecursive(unsigned depth) {
+		string left1 = std::string((depth-1)*2, ' ');
+		string left2 = std::string(depth*2, ' ');
+		string left3 = std::string((depth+1)*2, ' ');
+		cout << left1 << "tdecls:" << endl;
+		cout << left2 << "name: tdecls" << endl;
+		cout << left2 << "types:" << endl;
+		for (auto type: this->paramTypes_) {
+			cout << left3 << "- " << type->GetName() << endl;
+		}
 	};
 };
 
 struct ExternNode : public ASTNode {
-	string
-	GetName() {
-		return string("extern");
+	ValidType * retType_;
+	string identifier_;
+	ExternNode(ValidType * retType, string identifier) :
+		retType_(retType), identifier_(identifier) {
+
+	}
+
+	ExternNode(ValidType * retType, string identifier, TdeclsNode * tdeclsNode) :
+		retType_(retType), identifier_(identifier) {
+		this->children_.push_back(tdeclsNode);
+
+	}
+
+	void
+	PrintRecursive(unsigned depth) {
+		string left = std::string(depth*2, ' ');
+		cout << left << "name: extern" << endl;
+		cout << left << "ret_type: " << this->retType_->GetName() << endl;
+		cout << left << "globid: " << this->identifier_ << endl;
+		if (this->children_.size()>0) {
+			this->children_[0]->PrintRecursive(depth+1);
+		}
 	}
 };
 
 struct ExternsNode : public ASTNode {
-	string
-	GetName() {
-		return string("externs");
+
+	ExternsNode(ExternNode * externNode) {
+		this->children_.push_back(externNode);
+	}
+
+	ExternsNode(ExternsNode * externsNode, ExternNode * externNode) {
+		for (auto node : externsNode->children_) {
+			this->children_.push_back(node);
+		}
+		this->children_.push_back(externNode);
 	}
 
 	void
@@ -94,11 +130,14 @@ struct ExternsNode : public ASTNode {
 		cout << left3 << "-" << endl;
 	}
 
-	virtual void
+	void
 	PrintRecursive(unsigned depth) {
 		PrintSelf(depth);
-		for (auto node: this->children_) {
-			node->PrintRecursive(depth+2);
+		string left3 = std::string((depth+1)*2, ' ');
+		for (unsigned i=0; i<this->children_.size(); ++i) {
+			this->children_[i]->PrintRecursive(depth+2);
+			if (i!=this->children_.size()-1)
+				cout << left3 << "-" << endl;
 		}
 	};
 
@@ -121,17 +160,20 @@ struct FuncNode : public ASTNode {
 		this->children_.push_back(blockNode);
 	}
 
-	string
-	GetName() {
-		return string("func");
-	}
-
 	void
 	PrintSelf(unsigned depth) {
 		string left = std::string(depth*2, ' ');
-		cout << left << "name: " << this->GetName() << endl;
+		cout << left << "name: func" << endl;
 		cout << left << "ret_type: " << this->retType_->GetName() << endl;
 		cout << left << "globid: " << this->identifier_ << endl;
+	};
+
+	void
+	PrintRecursive(unsigned depth) {
+		PrintSelf(depth);
+		for (auto node : this->children_) {
+			node->PrintRecursive(depth+1);
+		}
 	};
 };
 
@@ -145,11 +187,6 @@ struct FuncsNode : public ASTNode {
 			this->children_.push_back(node);
 		}
 		this->children_.push_back(funcNode);
-	}
-
-	string
-	GetName() {
-		return string("funcs");
 	}
 
 	void
@@ -178,11 +215,6 @@ struct BlockNode: public ASTNode {
 		this->children_.push_back(statementsNode);
 	}
 
-	string
-	GetName() {
-		return string("blk");
-	}
-
 	void
 	PrintRecursive(unsigned depth) {
 		string left1 = std::string((depth-1)*2, ' ');
@@ -204,9 +236,10 @@ struct ExistingVarNode: public ASTNode {
 
 	void
 	PrintRecursive(unsigned depth) {
-		string left1 = std::string(depth*2, ' ');
+		string left1 = std::string((depth-1)*2, ' ');
 		cout << left1 << "name: varval" << endl;
-		cout << left1 << "var: " << this->identifier_ << endl;
+		cout << left1 << "var: " <<
+		this->identifier_.substr(1, string::npos) << endl;
 	}
 };
 
@@ -227,8 +260,8 @@ struct ExistingFuncNode: public ASTNode {
 
 
 struct UnaryOperationNode: public ASTNode {
-	OperationTypes operationType_;
-	UnaryOperationNode(OperationTypes operationType,
+	UnaryOperationTypes operationType_;
+	UnaryOperationNode(UnaryOperationTypes operationType,
 		ASTNode * expressionNode1) :
 		operationType_(operationType) {
 		this->children_.push_back(expressionNode1);
@@ -246,14 +279,21 @@ struct UnaryOperationNode: public ASTNode {
 		case Minus:
 			cout << "minus" << endl;
 			break;
-		this->children_[0]->PrintRecursive(depth+1);
+#ifndef NO_DEBUG
+		case EmptyUnaryOperation:
+			assert(false);
+			break;
+#endif
 		}
+		this->children_[0]->PrintRecursive(depth+1);
 	}
 };
 
 struct BinaryOperationNode: public ASTNode {
-	OperationTypes operationType_;
-	BinaryOperationNode(OperationTypes operationType,
+	BinaryOperationTypes operationType_;
+	ValidType * typeCast_ = nullptr;
+
+	BinaryOperationNode(BinaryOperationTypes operationType,
 		ASTNode * expressionNode1,
 		ASTNode * expressionNode2) :
 		operationType_(operationType) {
@@ -261,9 +301,17 @@ struct BinaryOperationNode: public ASTNode {
 		this->children_.push_back(expressionNode2);
 	}
 
+	BinaryOperationNode(BinaryOperationTypes operationType,
+		ValidType * validType,
+		ASTNode * expressionNode1) :
+		operationType_(Cast),
+		typeCast_(validType) {
+		this->children_.push_back(expressionNode1);
+	}
+
 	void
 	PrintRecursive(unsigned depth) {
-		string left1 = std::string(depth*2, ' ');
+		string left1 = std::string((depth-1)*2, ' ');
 		cout << left1 << "name: binop" << endl;
 		cout << left1 << "op: ";
 		switch (this->operationType_) {
@@ -272,7 +320,9 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case Cast:
 			cout << "cast" << endl;
-			break;
+			cout << "type: " << this->typeCast_->GetName() << endl;
+			this->children_[0]->PrintRecursive(depth+1);
+			return;
 		case Multiply:
 			cout << "mul" << endl;
 			break;
@@ -299,14 +349,17 @@ struct BinaryOperationNode: public ASTNode {
 		case Lor:
 			cout << "or" << endl;
 			break;
-		cout << "lhs:" << endl;
-		this->children_[0]->PrintRecursive(depth+1);
-		cout << "rhs:" << endl;
-		this->children_[1]->PrintRecursive(depth+1);
+#ifndef NO_DEBUG
+		case EmptyBinaryOperation:
+			assert(false);
+			break;
+#endif
 		}
+		cout << left1 << "lhs:" << endl;
+		this->children_[0]->PrintRecursive(depth+1);
+		cout << left1 << "rhs:" << endl;
+		this->children_[1]->PrintRecursive(depth+1);
 	}
-
-
 };
 
 struct ExpressionNode: public ASTNode {
@@ -352,7 +405,9 @@ struct ExpressionNode: public ASTNode {
 
 	void
 	PrintRecursive(unsigned depth) {
-		cout << "exp" << endl;
+		string left1 = std::string((depth-1)*2, ' ');
+		string left2 = std::string(depth*2, ' ');
+		cout << left1 << "exp:" << endl;
 		switch (this->constructorCase_) {
 		case 0:
 			this->children_[0]->PrintRecursive(depth+1);
@@ -364,27 +419,30 @@ struct ExpressionNode: public ASTNode {
 			this->children_[0]->PrintRecursive(depth+1);
 			break;
 		case 3:
-			string left = std::string(depth*2, ' ');
-			cout << "name: " << left << literal_->GetName() << endl;
-			cout << "value: " << left;
-			LiteralValue lv = literal_->GetValue();
+		{
+			cout << left2 << "name: " << literal_->GetName() << endl;
+			cout << left2 << "value: ";
+			unique_ptr<LiteralValue>& lv = literal_->GetValue();
 			switch (literal_->type_) {
 			case Int:
-				cout << lv.iValue_ << endl;
+				cout << lv->iValue_ << endl;
 				break;
 			case Float:
-				cout << lv.fValue_ << endl;
-				break;
-			case Float:
-				cout << lv.fValue_ << endl;
+				cout << lv->fValue_ << endl;
 				break;
 			case String:
-				cout << lv.sValue_ << endl;
+				cout << lv->sValue_.substr(1, string::npos - 1) << endl;
 				break;
 			case Boolean:
-				cout << lv.bValue_ << endl;
+				cout << lv->bValue_ << endl;
 				break;
+#ifndef NO_DEBUG
+			case EmptyLiteral:
+				assert(false);
+				break;
+#endif
 			}
+		}
 			break;
 		case 4:
 			this->children_[0]->PrintRecursive(depth+1);
@@ -394,7 +452,7 @@ struct ExpressionNode: public ASTNode {
 			break;
 		case 6:
 			this->children_[0]->PrintRecursive(depth+1);
-			cout << "params:" << endl;
+			cout << left2 << "params:" << endl;
 			this->children_[1]->PrintRecursive(depth+1);
 			break;
 		}
@@ -545,7 +603,7 @@ struct StatementNode: public ASTNode {
 		case 5: // while
 			cout << left1 << "cond:" << endl;
 			this->children_[0]->PrintRecursive(depth+1);
-			cout << "stmt:" << endl;
+			cout << left1 << "stmt:" << endl;
 			this->children_[1]->PrintRecursive(depth+1);
 			break;
 		case 6: // if
@@ -555,17 +613,17 @@ struct StatementNode: public ASTNode {
 		case 7: // else
 			cout << left1 << "cond:" << endl;
 			this->children_[0]->PrintRecursive(depth+1);
-			cout << "stmt:" << endl;
+			cout << left1 << "stmt:" << endl;
 			this->children_[1]->PrintRecursive(depth+1);
-			cout << "else_stmt:" << endl;
+			cout << left1 << "else_stmt:" << endl;
 			this->children_[2]->PrintRecursive(depth+1);
 			break;
 		case 8: // print exp
 			this->children_[0]->PrintRecursive(depth+1);
 			break;
 		case 9: // print literal
-			cout << left1 << "string: " << '"' <<
-			this->printStringLiteral_ << '"' << endl;
+			cout << left1 << "string: " <<
+			this->printStringLiteral_ << endl;
 			break;
 		}
 
@@ -583,11 +641,6 @@ struct StatementsNode: public ASTNode {
 			this->children_.push_back(node);
 		}
 		this->children_.push_back(statementNode);
-	}
-
-	string
-	GetName() {
-		return string("stmts");
 	}
 
 	void
@@ -613,17 +666,14 @@ struct VdeclNode : public ASTNode {
 	VdeclNode(ValidType * type, string identifier) :
 		type_(type), identifier_(identifier.substr(1, string::npos)) { }
 
-	string
-	GetName() {
-		return string("vdecl");
-	}
-
 	void
 	PrintSelf(unsigned depth) {
-		string left1 = std::string(depth*2, ' ');
-		cout << left1 << "node: vdecl" << endl;
-		cout << left1 << "type: " << this->type_->GetName() << endl;
-		cout << left1 << "var: " << this->identifier_ << endl;
+		string left1 = std::string((depth-1)*2, ' ');
+		string left2 = std::string(depth*2, ' ');
+		cout << left1 << "vdecl:" << endl;
+		cout << left2 << "node: vdecl" << endl;
+		cout << left2 << "type: " << this->type_->GetName() << endl;
+		cout << left2 << "var: " << this->identifier_ << endl;
 	}
 };
 
@@ -639,11 +689,6 @@ struct VdeclsNode : public ASTNode {
 		this->children_.push_back(vdeclNode);
 	}
 
-	string
-	GetName() {
-		return string("vdecls");
-	}
-
 	void
 	PrintRecursive(unsigned depth) {
 		string left1 = std::string((depth-1)*2, ' ');
@@ -654,14 +699,11 @@ struct VdeclsNode : public ASTNode {
 		cout << left2 << "vars:" << endl;
 		cout << left3 << "-" << endl;
 		for (unsigned i=0; i<this->children_.size(); ++i) {
-			this->children_[i]->PrintRecursive(depth+2);
+			this->children_[i]->PrintRecursive(depth+3);
 			if (i!=this->children_.size()-1)
 				cout << left3 << "-" << endl;
 		}
 	};
 };
-
-
-
 
 #endif /* EKCC_AST_HPP_ */

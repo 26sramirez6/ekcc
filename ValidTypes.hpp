@@ -2,10 +2,12 @@
 #define VALIDTYPES_HPP_
 #include <string.h>
 #include <iostream>
+#include <memory>
 
 using std::cout;
 using std::endl;
 using std::string;
+using std::unique_ptr;
 
 struct ValidType {
 	virtual string
@@ -63,13 +65,13 @@ struct RefType : public ValidType {
     string
 	GetName() {
     	if (noAlias_) return string("noalias ref ") + this->referredType_->GetName();
-    	return string("ref") + this->referredType_->GetName();
+    	return string("ref ") + this->referredType_->GetName();
 	}
 };
 
 
 enum ControlTypes {
-	Empty,
+	EmptyControl,
 	If,
 	IfElse,
 	While,
@@ -104,31 +106,39 @@ enum LiteralTypes {
 	Boolean
 };
 
-union LiteralValue {
-	int iValue_ = 0;
-	float fValue_ = 0.;
+struct LiteralValue {
+	int iValue_;
+	float fValue_;
 	string sValue_;
-	bool bValue_ = false;
+	bool bValue_;
 };
 
 struct Literal {
 	LiteralTypes type_ = EmptyLiteral;
 	string name_;
-	LiteralValue value_;
-	Literal(int value) : type_(Int), name_("ilit") {
-		this->value_.iValue_ = value;
+	unique_ptr<LiteralValue> value_;
+	Literal(int value) : type_(Int),
+			name_("ilit"),
+			value_(new LiteralValue()) {
+		this->value_->iValue_ = value;
 	}
 
-	Literal(float value) : type_(Float), name_("flit") {
-		this->value_.fValue_ = value;
+	Literal(float value) : type_(Float),
+			name_("flit"),
+			value_(new LiteralValue()) {
+		this->value_->fValue_ = value;
 	}
 
-	Literal(string value) : type_(String), name_("slit") {
-		this->value_.sValue_ = value;
+	Literal(string value) : type_(String),
+			name_("slit"),
+			value_(new LiteralValue()) {
+		this->value_->sValue_ = value;
 	}
 
-	Literal(bool value) : type_(Boolean), name_("blit") {
-		this->value_.bValue_ = value;
+	Literal(bool value) : type_(Boolean),
+			name_("blit"),
+			value_(new LiteralValue()) {
+		this->value_->bValue_ = value;
 	}
 
 	string
@@ -136,14 +146,14 @@ struct Literal {
 		return this->name_;
 	}
 
-	LiteralValue
+	unique_ptr<LiteralValue>&
 	GetValue() {
 		return this->value_;
 	}
 };
 
-enum OperationTypes {
-	EmptyOperation,
+enum BinaryOperationTypes {
+	EmptyBinaryOperation,
 	Assign,
 	Cast,
 	Multiply,
@@ -155,17 +165,13 @@ enum OperationTypes {
 	GreaterThan,
 	Land,
 	Lor,
+};
+
+enum UnaryOperationTypes {
+	EmptyUnaryOperation,
 	Not,
 	Minus
 };
-//struct LiteralType {
-//	LiteralTypes type_;
-//	LiteralType(int type) : type_(type) {
-//
-//	}
-//};
-
-
 
 struct Function {
 
