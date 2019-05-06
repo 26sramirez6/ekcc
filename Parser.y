@@ -2,7 +2,10 @@
     #include <stdio.h>
     #include <cstdio>
     #include <iostream>
-    #include "Expression.h"
+    #include <string>
+    #include <fstream>
+    #include <sstream>
+    #include "CompilerConfig.hpp"
     #include "ValidTypes.hpp"
     #include "AST.hpp"
     #include "Lexer.hpp"
@@ -20,9 +23,15 @@
 %}
 
 %code requires {
-  #include "ValidTypes.hpp"
-  #include "AST.hpp"
-  #include "Expression.h"
+    #include <stdio.h>
+    #include <cstdio>
+    #include <iostream>
+    #include <string>
+    #include <fstream>
+    #include <sstream>
+    #include "CompilerConfig.hpp"
+    #include "ValidTypes.hpp"
+    #include "AST.hpp"
 }
 
 %union{
@@ -30,23 +39,7 @@
   bool bval;
   float fval;
   char *sval;
-//  IntType intType;
-//  FloatType floatType;
-//  CintType cintType;
-//  BoolType boolType;
-//  VoidType voidType;
-//  RefType refType;
 
-//  IfControl ifControl;
-//  ElseControl elseControl;
-//  WhileControl whileControl;
-//  ReturnControl returnControl;
-//
-//  PrintFunction printFunction;
-//  RunFunction runFunction;
-//  DefFunction defFunction;
-//  ExternFunction externFunction;
-  
   Literal * literal;
   ControlFlow * controlFlow;
   ValidType * validType;
@@ -281,6 +274,7 @@ type:
   | T_TYPE_FLOAT { $$ = new FloatType(); }
   | T_TYPE_BOOL { $$ = new BoolType(); }
   | T_TYPE_VOID { $$ = new VoidType(); }
+  | T_TYPE_REF { $$ = new RefType(); }
   | T_TYPE_REF type { $$ = new RefType(false, $2); }
   | T_TYPE_NOALIAS T_TYPE_REF type { $$ = new RefType(true, $3); }
   ;
@@ -303,28 +297,48 @@ lit:
 %%
 
 int main(int argc, char ** argv) {
-  // open a file handle to a particular file:
-  FILE *myfile = fopen("test_simple.ek", "r");
-  // make sure it's valid:
-  if (!myfile) {
-    cout << "I can't open file!" << endl;
-    return -1;
-  }
-  // Set flex to read from it instead of defaulting to STDIN:
-  yyin = myfile;
-
-  // Set up the root tree
-  ProgramNode * root;
-  
-  // Parse through the input:
-  yyparse(&root);
-  
-  // Print the AST Tree
-  root->PrintRecursive(0);
+	
+	CompilerConfig cfg(argc, argv);
+	if (!cfg.properConfig_) {
+		cout << "Usage: [-h|-?] [-v] [-O] " <<
+				"[-emit-ast|-emit-llvm] -o " <<
+				"<output-file> <input-file>" << endl;
+		return -1;
+	} else if (cfg.help_) {
+		cout << "Usage: [-h|-?] [-v] [-O] " <<
+				"[-emit-ast|-emit-llvm] -o " <<
+				"<output-file> <input-file>" << endl;
+	}
+	// open a file handle to a particular file:
+	FILE * unit = fopen(cfg.inputFile_, "r");
+	// make sure it's valid:
+	if (!unit) {
+		cout << "Error opening file" << endl;
+		return -1;
+	}
+	// Set flex to read from it instead of defaulting to STDIN:
+	yyin = unit;
+	
+	// Set up the root tree
+	ProgramNode * root;
+	
+	// Parse through the input:
+	yyparse(&root);
+	
+	// set up the string stream
+	stringstream ss;
+	
+	// Print the AST Tree
+	root->PrintRecursive(ss, 0);
+	
+	ofstream out(cfg.outputFile_);
+	out << ss.str() << "\n...";
+	out.close();
+	return 0;
 }
 
 void yyerror(const char *s) {
-  cout << "EEK, parse error!  Message: " << s << endl;
+  cout << "compile error" << s << endl;
   // might as well halt now:
   exit(-1);
 }

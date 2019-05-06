@@ -1,0 +1,24 @@
+Criteria	Ratings	Pts
+<vdecl> may not have void type. //done
+15.0 pts
+-> I modified the constructor of vdeclnode to check if the passing type is void.
+
+a ref type may not contain a 'ref' or 'void' type. //done
+15.0 pts
+-> I modified the constructor of RefType to check if the refered type is ref or void.
+Also, to avoid seg fault for case like "ref ref"(since the referredType for the second ref is nullptr) I add another condition 
+for GetName() for such case.
+
+---That's all I did yesterday.
+
+all functions must be declared before use
+15.0 pts
+a function may not return a ref type.
+15.0 pts
+ref var initializer must be a variable.
+15.0 pts
+all programs define the "run" function with the right type.
+15.0 pts
+Compiler reports a reasonable error message & exit code.
+10.0 pts
+Total Points: 100.0

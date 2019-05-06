@@ -9,6 +9,43 @@ using std::endl;
 using std::string;
 using std::unique_ptr;
 
+enum ControlTypes {
+	EmptyControl,
+	If,
+	IfElse,
+	While,
+	Return
+};
+
+enum BinaryOperationTypes {
+	EmptyBinaryOperation,
+	Assign,
+	Cast,
+	Multiply,
+	Divide,
+	Add,
+	Subtract,
+	Equality,
+	LessThan,
+	GreaterThan,
+	Land,
+	Lor,
+};
+
+enum LiteralTypes {
+	EmptyLiteral,
+	String,
+	Int,
+	Float,
+	Boolean
+};
+
+enum UnaryOperationTypes {
+	EmptyUnaryOperation,
+	Not,
+	Minus
+};
+
 struct ValidType {
 	virtual string
 	GetName() = 0;
@@ -60,22 +97,26 @@ struct RefType : public ValidType {
     ValidType * referredType_ = nullptr;
     RefType() {}
     RefType(bool noAlias, ValidType * referredType) :
-    	noAlias_(noAlias), referredType_(referredType) {}
+    	noAlias_(noAlias), referredType_(referredType) {
+			// Check: a ref type may not contain a 'ref' or 'void' type.
+			if(referredType->GetName() == "ref"){
+				cout << "error: ref type can't be ref." << endl;
+			}else if(referredType->GetName() == "void"){
+				cout << "error: ref type can't be void." << endl;
+			}
+		}
 
     string
 	GetName() {
-    	if (noAlias_) return string("noalias ref ") + this->referredType_->GetName();
-    	return string("ref ") + this->referredType_->GetName();
+    	if (noAlias_) {
+			return string("noalias ref ") + this->referredType_->GetName();
+		// To avoid seg fault when "ref ref"
+		}else if(this->referredType_ == nullptr){
+			return string("ref");
+		}else{
+			return string("ref ") + this->referredType_->GetName();
+		}
 	}
-};
-
-
-enum ControlTypes {
-	EmptyControl,
-	If,
-	IfElse,
-	While,
-	Return
 };
 
 struct ControlFlow {
@@ -96,14 +137,6 @@ struct WhileControl : ControlFlow {
 
 struct ReturnControl : ControlFlow {
 	ControlTypes controlType_ = Return;
-};
-
-enum LiteralTypes {
-	EmptyLiteral,
-	String,
-	Int,
-	Float,
-	Boolean
 };
 
 struct LiteralValue {
@@ -152,45 +185,10 @@ struct Literal {
 	}
 };
 
-enum BinaryOperationTypes {
-	EmptyBinaryOperation,
-	Assign,
-	Cast,
-	Multiply,
-	Divide,
-	Add,
-	Subtract,
-	Equality,
-	LessThan,
-	GreaterThan,
-	Land,
-	Lor,
-};
-
-enum UnaryOperationTypes {
-	EmptyUnaryOperation,
-	Not,
-	Minus
-};
-
-struct Function {
-
-};
-
-struct PrintFunction : Function {
-
-};
-
-struct RunFunction : Function {
-
-};
-
-struct DefFunction : Function {
-
-};
-
-struct ExternFunction : Function {
-
-};
+struct Function {};
+struct PrintFunction : Function {};
+struct RunFunction : Function {};
+struct DefFunction : Function {};
+struct ExternFunction : Function {};
 
 #endif

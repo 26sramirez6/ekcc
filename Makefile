@@ -7,19 +7,18 @@ valgrind: clean ekcc
 	valgrind --leak-check=full --track-origins=yes --log-file="valgrind.out" --show-reachable=yes -v ./ekcc
 
 ekcc: Lexer.o Parser.o
-	$(CC) $(CFLAGS) $^ -lfl -o $@
-	./ekcc > ekcc.yaml
+	$(CC) $(CFLAGS) $^ -ll -o $@
 
-Lexer.o: Lexer.cpp Parser.cpp AST.hpp
-	$(CC) $(CFLAGS) -c $< -o $@ -lfl
+Lexer.o: Lexer.cpp Parser.cpp AST.hpp CompilerConfig.hpp
+	$(CC) $(CFLAGS) -c $< -o $@ -ll
 
-Parser.o: Parser.cpp Lexer.cpp AST.hpp
-	$(CC) $(CFLAGS) -c $< -o $@ -lfl
+Parser.o: Parser.cpp Lexer.cpp AST.hpp CompilerConfig.hpp
+	$(CC) $(CFLAGS) -c $< -o $@ -ll
 
-Lexer.cpp: Lexer.l Parser.y ValidTypes.hpp AST.hpp
+Lexer.cpp: Lexer.l Parser.y ValidTypes.hpp AST.hpp CompilerConfig.hpp
 	flex --header-file=Lexer.hpp --outfile=$@ Lexer.l
 
-Parser.cpp: Parser.y Lexer.cpp ValidTypes.hpp AST.hpp
+Parser.cpp: Parser.y Lexer.cpp ValidTypes.hpp AST.hpp CompilerConfig.hpp
 	bison -o $@ --defines=Parser.hpp Parser.y
 
 Parser.hpp: Parser.cpp
