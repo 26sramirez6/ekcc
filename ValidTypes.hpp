@@ -34,10 +34,20 @@ enum BinaryOperationTypes {
 
 enum LiteralTypes {
 	EmptyLiteral,
-	String,
-	Int,
-	Float,
-	Boolean
+	StringLiteral,
+	IntLiteral,
+	FloatLiteral,
+	BooleanLiteral
+};
+
+enum VariableTypes {
+	IntVarType,
+	CintVarType,
+	StringVarType,
+	FloatVarType,
+	BooleanVarType,
+	RefVarType,
+	VoidVarType
 };
 
 enum UnaryOperationTypes {
@@ -49,12 +59,12 @@ enum UnaryOperationTypes {
 struct ValidType {
 	virtual string
 	GetName() = 0;
-
+	VariableTypes varType_;
 	virtual ~ValidType() {}
 };
 
 struct IntType : public ValidType {
-
+	VariableTypes varType_ = IntVarType;
 	string
 	GetName() {
 		return string("int");
@@ -62,7 +72,7 @@ struct IntType : public ValidType {
 };
 
 struct FloatType : public ValidType {
-
+	VariableTypes varType_ = FloatVarType;
 	string
 	GetName() {
 		return string("float");
@@ -70,7 +80,7 @@ struct FloatType : public ValidType {
 };
 
 struct CintType : public ValidType {
-
+	VariableTypes varType_ = CintVarType;
 	string
 	GetName() {
 		return string("cint");
@@ -78,7 +88,7 @@ struct CintType : public ValidType {
 };
 
 struct BoolType : public ValidType {
-
+	VariableTypes varType_ = BooleanVarType;
 	string
 	GetName() {
 		return string("bool");
@@ -86,6 +96,7 @@ struct BoolType : public ValidType {
 };
 
 struct VoidType : public ValidType {
+	VariableTypes varType_ = VoidVarType;
 	string
 	GetName() {
 		return string("void");
@@ -93,18 +104,26 @@ struct VoidType : public ValidType {
 };
 
 struct RefType : public ValidType {
+	VariableTypes varType_ = RefVarType;
     bool noAlias_ = false;
     ValidType * referredType_ = nullptr;
+
     RefType() {}
     RefType(bool noAlias, ValidType * referredType) :
     	noAlias_(noAlias), referredType_(referredType) {
-			// Check: a ref type may not contain a 'ref' or 'void' type.
-			if(referredType->GetName() == "ref"){
-				cout << "error: ref type can't be ref." << endl;
-			}else if(referredType->GetName() == "void"){
-				cout << "error: ref type can't be void." << endl;
-			}
+		// Check: a ref type may not contain a 'ref' or 'void' type.
+		if(referredType->varType_ == RefVarType){
+			cout << "error: ref type point to another ref." << endl;
+		}else if(referredType->varType_ == VoidVarType){
+			cout << "error: ref type can't be void." << endl;
 		}
+	}
+
+    ~RefType() {
+    	if (this->referredType_ != nullptr) {
+    		delete this->referredType_;
+    	}
+    }
 
     string
 	GetName() {
@@ -117,6 +136,7 @@ struct RefType : public ValidType {
 			return string("ref ") + this->referredType_->GetName();
 		}
 	}
+
 };
 
 struct ControlFlow {
@@ -150,25 +170,25 @@ struct Literal {
 	LiteralTypes type_ = EmptyLiteral;
 	string name_;
 	unique_ptr<LiteralValue> value_;
-	Literal(int value) : type_(Int),
+	Literal(int value) : type_(IntLiteral),
 			name_("ilit"),
 			value_(new LiteralValue()) {
 		this->value_->iValue_ = value;
 	}
 
-	Literal(float value) : type_(Float),
+	Literal(float value) : type_(FloatLiteral),
 			name_("flit"),
 			value_(new LiteralValue()) {
 		this->value_->fValue_ = value;
 	}
 
-	Literal(string value) : type_(String),
+	Literal(string value) : type_(StringLiteral),
 			name_("slit"),
 			value_(new LiteralValue()) {
 		this->value_->sValue_ = value;
 	}
 
-	Literal(bool value) : type_(Boolean),
+	Literal(bool value) : type_(BooleanLiteral),
 			name_("blit"),
 			value_(new LiteralValue()) {
 		this->value_->bValue_ = value;

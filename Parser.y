@@ -8,16 +8,16 @@
     #include "CompilerConfig.hpp"
     #include "ValidTypes.hpp"
     #include "AST.hpp"
-    #include "Lexer.hpp"
     #include "Parser.hpp"
     using namespace std;
     // stuff from flex that bison needs to know about:
+    extern "C" {
     extern int yylex();
     extern int yyparse();
+    extern int lineNumber;
     extern FILE *yyin;
   
-    void yyerror(ProgramNode ** node, const char *s) {
-    	
+    void yyerror(ProgramNode ** node, const char *s) {}
     }
 
 %}
@@ -158,114 +158,114 @@
 %%
 
 prog:
-  funcs { $$ = new ProgramNode($1); (*root) = $$; }
-  | externs funcs { $$ = new ProgramNode($1, $2); (*root) = $$; }
+  funcs { $$ = new ProgramNode(lineNumber, $1); (*root) = $$; }
+  | externs funcs { $$ = new ProgramNode(lineNumber, $1, $2); (*root) = $$; }
   ;
 
 externs:
-  extern { $$ = new ExternsNode($1); }
-  | externs extern { $$ = new ExternsNode($1, $2); }
+  extern { $$ = new ExternsNode(lineNumber,$1); }
+  | externs extern { $$ = new ExternsNode(lineNumber,$1, $2); }
   ;
 
 extern:
   T_FUNCTION_EXTERN type T_IDENT "(" ")" ";" { 
-	$$ = new ExternNode($2, $3); 
+	$$ = new ExternNode(lineNumber,$2, $3); 
 	}
   | T_FUNCTION_EXTERN type T_IDENT "(" tdecls ")" ";" { 
-	  $$ = new ExternNode($2, $3, $5); 
+	  $$ = new ExternNode(lineNumber,$2, $3, $5); 
   	}
   ;
 
 funcs:
-  func { $$ = new FuncsNode($1); }
-  | funcs func { $$ = new FuncsNode($1, $2); }
+  func { $$ = new FuncsNode(lineNumber,$1); }
+  | funcs func { $$ = new FuncsNode(lineNumber,$1, $2); }
   ;
 
 func:
-  T_FUNCTION_DEF type T_IDENT "(" ")" blk { $$ = new FuncNode($2, $3, $6); }
-  | T_FUNCTION_DEF type T_IDENT "(" vdecls ")" blk { $$ = new FuncNode($2, $3, $5, $7); }
-  | T_FUNCTION_DEF type T_FUNCTION_RUN "(" ")" blk { $$ = new FuncNode($2, "run", $6); }
+  T_FUNCTION_DEF type T_IDENT "(" ")" blk { $$ = new FuncNode(lineNumber,$2, $3, $6); }
+  | T_FUNCTION_DEF type T_IDENT "(" vdecls ")" blk { $$ = new FuncNode(lineNumber,$2, $3, $5, $7); }
+  | T_FUNCTION_DEF type T_FUNCTION_RUN "(" ")" blk { $$ = new FuncNode(lineNumber,$2, "run", $6); }
   ;
 
 blk:
-  "{" "}" { $$ = new BlockNode(); }
-  | "{" stmts "}" { $$ = new BlockNode($2); }
+  "{" "}" { $$ = new BlockNode(lineNumber); }
+  | "{" stmts "}" { $$ = new BlockNode(lineNumber,$2); }
   ; 
 
 stmts:
-  stmt { $$ = new StatementsNode($1); }
-  | stmts stmt { $$ = new StatementsNode($1, $2); }
+  stmt { $$ = new StatementsNode(lineNumber, $1); }
+  | stmts stmt { $$ = new StatementsNode(lineNumber, $1, $2); }
   ;
 
 stmt:
-  blk { $$ = new StatementNode($1); }
-  | T_CONTROL_RETURN ";" { $$ = new StatementNode(new ReturnControl()); }
-  | T_CONTROL_RETURN exp ";" { $$ = new StatementNode(new ReturnControl(), $2); }
-  | vdecl "=" exp ";" { $$ = new StatementNode($1, $3); }
-  | exp ";" { $$ = new StatementNode($1); }
-  | T_CONTROL_WHILE "(" exp ")" stmt { $$ = new StatementNode(new WhileControl(), $3, $5); }
-  | T_CONTROL_IF "(" exp ")" stmt { $$ = new StatementNode(new IfControl(), $3, $5); }
+  blk { $$ = new StatementNode(lineNumber,$1); }
+  | T_CONTROL_RETURN ";" { $$ = new StatementNode(lineNumber,new ReturnControl()); }
+  | T_CONTROL_RETURN exp ";" { $$ = new StatementNode(lineNumber,new ReturnControl(), $2); }
+  | vdecl "=" exp ";" { $$ = new StatementNode(lineNumber,$1, $3); }
+  | exp ";" { $$ = new StatementNode(lineNumber,$1); }
+  | T_CONTROL_WHILE "(" exp ")" stmt { $$ = new StatementNode(lineNumber,new WhileControl(), $3, $5); }
+  | T_CONTROL_IF "(" exp ")" stmt { $$ = new StatementNode(lineNumber,new IfControl(), $3, $5); }
   | T_CONTROL_IF "(" exp ")" stmt  T_CONTROL_ELSE stmt { 
-	  $$ = new StatementNode(new ElseControl(), $3, $5, $7);
+	  $$ = new StatementNode(lineNumber,new ElseControl(), $3, $5, $7);
   }
-  | T_FUNCTION_PRINT exp ";" { $$ = new StatementNode(new PrintFunction(), $2); }
-  | T_FUNCTION_PRINT T_STRING_LITERAL ";" { $$ = new StatementNode(new PrintFunction(), $2); }
+  | T_FUNCTION_PRINT exp ";" { $$ = new StatementNode(lineNumber,new PrintFunction(), $2); }
+  | T_FUNCTION_PRINT T_STRING_LITERAL ";" { $$ = new StatementNode(lineNumber,new PrintFunction(), $2); }
   ;
 
 exps:
-  exp { $$ = new ExpressionsNode($1); }
-  | exps "," exp { $$ = new ExpressionsNode($1, $3); }
+  exp { $$ = new ExpressionsNode(lineNumber,$1); }
+  | exps "," exp { $$ = new ExpressionsNode(lineNumber,$1, $3); }
   ;
 
 exp:
-  "(" exp ")" { $$ = new ExpressionNode($2); }
-  | binop { $$ = new ExpressionNode($1); }
-  | uop { $$ = new ExpressionNode($1); }
-  | lit { $$ = new ExpressionNode($1); }
-  | varid { $$ = new ExpressionNode($1); }
-  | globid "(" ")" { $$ = new ExpressionNode($1); }
-  | globid "(" exps ")" { $$ = new ExpressionNode($1, $3); }
+  "(" exp ")" { $$ = new ExpressionNode(lineNumber,$2); }
+  | binop { $$ = new ExpressionNode(lineNumber,$1); }
+  | uop { $$ = new ExpressionNode(lineNumber,$1); }
+  | lit { $$ = new ExpressionNode(lineNumber,$1); }
+  | varid { $$ = new ExpressionNode(lineNumber,$1); }
+  | globid "(" ")" { $$ = new ExpressionNode(lineNumber,$1); }
+  | globid "(" exps ")" { $$ = new ExpressionNode(lineNumber,$1, $3); }
   ;
 
 binop:
   arithops { $$ = $1; }
   | logicops { $$ = $1; }
-  | varid "=" exp { $$ = new BinaryOperationNode(Assign, $1, $3); }
-  | "[" type "]" exp { $$ = new BinaryOperationNode(Cast, $2, $4); }
+  | varid "=" exp { $$ = new BinaryOperationNode(lineNumber,Assign, $1, $3); }
+  | "[" type "]" exp { $$ = new BinaryOperationNode(lineNumber,Cast, $2, $4); }
   ;
 
 logicops:
-  exp "==" exp { $$ = new BinaryOperationNode(Equality, $1, $3); }
-  | exp "<" exp { $$ = new BinaryOperationNode(LessThan, $1, $3); }
-  | exp ">" exp { $$ = new BinaryOperationNode(GreaterThan, $1, $3); }
-  | exp "&&" exp { $$ = new BinaryOperationNode(Land, $1, $3); }
-  | exp "||" exp { $$ = new BinaryOperationNode(Lor, $1, $3); }
+  exp "==" exp { $$ = new BinaryOperationNode(lineNumber,Equality, $1, $3); }
+  | exp "<" exp { $$ = new BinaryOperationNode(lineNumber,LessThan, $1, $3); }
+  | exp ">" exp { $$ = new BinaryOperationNode(lineNumber,GreaterThan, $1, $3); }
+  | exp "&&" exp { $$ = new BinaryOperationNode(lineNumber,Land, $1, $3); }
+  | exp "||" exp { $$ = new BinaryOperationNode(lineNumber,Lor, $1, $3); }
   ;
 
 arithops:
-  exp "*" exp { $$ = new BinaryOperationNode(Multiply, $1, $3); }
-  | exp "/" exp { $$ = new BinaryOperationNode(Divide, $1, $3); }
-  | exp "+" exp { $$ = new BinaryOperationNode(Add, $1, $3);  }
-  | exp "-" exp { $$ = new BinaryOperationNode(Subtract, $1, $3); }
+  exp "*" exp { $$ = new BinaryOperationNode(lineNumber,Multiply, $1, $3); }
+  | exp "/" exp { $$ = new BinaryOperationNode(lineNumber,Divide, $1, $3); }
+  | exp "+" exp { $$ = new BinaryOperationNode(lineNumber,Add, $1, $3);  }
+  | exp "-" exp { $$ = new BinaryOperationNode(lineNumber,Subtract, $1, $3); }
   ;
     
 uop:
-  "!" exp { $$ = new UnaryOperationNode(Not, $2); }
-  | "-" exp %prec UMINUS{ $$ = new UnaryOperationNode(Minus, $2); }
+  "!" exp { $$ = new UnaryOperationNode(lineNumber,Not, $2); }
+  | "-" exp %prec UMINUS{ $$ = new UnaryOperationNode(lineNumber,Minus, $2); }
   ;
 
 vdecls:
-  vdecl { $$ = new VdeclsNode($1); }
-  | vdecls "," vdecl { $$ = new VdeclsNode($1, $3); }
+  vdecl { $$ = new VdeclsNode(lineNumber,$1); }
+  | vdecls "," vdecl { $$ = new VdeclsNode(lineNumber,$1, $3); }
   ;
 
 tdecls:
-  type { $$ = new TdeclsNode($1); }
-  | tdecls "," type { $$ = new TdeclsNode($1, $3); }
+  type { $$ = new TdeclsNode(lineNumber,$1); }
+  | tdecls "," type { $$ = new TdeclsNode(lineNumber,$1, $3); }
   ;
 
 vdecl:
-  type T_VARID { $$ = new VdeclNode($1, $2); }
+  type T_VARID { $$ = new VdeclNode(lineNumber, $1, $2); }
   ;
 
 type:
@@ -280,11 +280,11 @@ type:
   ;
 
 varid:
-  T_VARID { $$ = new ExistingVarNode($1); }
+  T_VARID { $$ = new ExistingVarNode(lineNumber,$1); }
   ;
 
 globid:
-  T_IDENT { $$ = new ExistingFuncNode($1); }
+  T_IDENT { $$ = new ExistingFuncNode(lineNumber,$1); }
   ;
 
 lit:
@@ -296,6 +296,14 @@ lit:
 
 %%
 
+// initialize static AST members
+ASTNode * ASTNode::root_ = nullptr;
+bool ASTNode::ready_ = false;
+vector<string> ASTNode::compilerErrors_;
+vector<int> ASTNode::lineNumberErrors_;
+VarTable ASTNode::varTable_;
+FuncTable ASTNode::funcScope_;
+	
 int main(int argc, char ** argv) {
 	
 	CompilerConfig cfg(argc, argv);
@@ -329,11 +337,16 @@ int main(int argc, char ** argv) {
 	stringstream ss;
 	
 	// Print the AST Tree
-	root->PrintRecursive(ss, 0);
-	
+	root->PrintRecursive(ss, 0);	
 	ofstream out(cfg.outputFile_);
 	out << ss.str() << "\n...";
 	out.close();
+	
+	if (root->HasCompilerErrors()) {
+		cout << root->GetCompilerErrors() << endl;
+		return 1;
+	}
+	
 	return 0;
 }
 

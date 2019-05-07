@@ -4,10 +4,13 @@
   #include "Parser.hpp"
   #include <iostream>
   using namespace std;
+  #define YY_DECL extern "C" int yylex()
+  int lineNumber = 1;
 %}
 
 %%
-[ \t\n]           { continue; }
+[ \t]			  { continue; }
+[\n]              { lineNumber++; continue; }
 "#".*             { continue; }
 "int"             { return T_TYPE_INT; }
 "float"           { return T_TYPE_FLOAT; }
