@@ -13,14 +13,17 @@
 #include<utility>
 #include<sstream>
 #include<unordered_map>
+#include<tuple>
 #include<assert.h>
+
 #include "ValidTypes.hpp"
 using std::vector;
 using std::string;
 using std::move;
 using std::stringstream;
 using std::unordered_map;
-
+using std::tuple;
+using std::get;
 typedef std::unordered_map<string, ValidType *> VarTable;
 typedef std::unordered_map<string, ValidType *>::const_iterator VarTableEntry;
 typedef std::unordered_map<string, vector< ValidType * > > FuncTable;
@@ -33,7 +36,9 @@ struct ASTNode {
 	static vector< string > compilerErrors_;
 	static vector< int > lineNumberErrors_;
 	static FuncTable funcTable_;
+	static tuple<string, int> recursiveFuncPlaceHolder_;
 	static VarTable varTable_;
+	static bool runDefined_;
 	vector< ASTNode * > children_;
 	unsigned lineNumber_;
 
@@ -61,14 +66,22 @@ struct ProgramNode : public ASTNode {
 	ProgramNode(unsigned lineNumber, ASTNode * funcsNode) :
 		ASTNode(lineNumber) {
 		this->children_.push_back(funcsNode);
-		this->root_ = this;
+		ASTNode::root_ = this;
+		if (!ASTNode::runDefined_) {
+			ASTNode::compilerErrors_.push_back(
+				"error: Undefined run function\n");
+		}
 	}
 
 	ProgramNode(unsigned lineNumber, ASTNode * externs,
 			ASTNode * funcsNode) : ASTNode(lineNumber){
 		this->children_.push_back(funcsNode);
 		this->children_.push_back(externs);
-		this->root_ = this;
+		ASTNode::root_ = this;
+		if (!ASTNode::runDefined_) {
+			ASTNode::compilerErrors_.push_back(
+				"error: Undefined run function\n");
+		}
 	}
 
 	void
@@ -223,11 +236,31 @@ struct TdeclsNode : public ASTNode {
 struct ExternNode : public ASTNode {
 	ValidType * retType_ = nullptr;
 	string identifier_;
+
 	ExternNode(unsigned lineNumber,
 			ValidType * retType, string identifier) :
 		retType_(retType), identifier_(identifier),
 		ASTNode(lineNumber) { 
 
+		this->Validate(lineNumber,
+			retType, identifier);
+	}
+
+	ExternNode(unsigned lineNumber,
+			ValidType * retType,
+			string identifier,
+			TdeclsNode * tdeclsNode) :
+		retType_(retType), identifier_(identifier),
+		ASTNode(lineNumber) {
+
+		this->Validate(lineNumber,
+			retType, identifier);
+		this->children_.push_back(tdeclsNode);
+	}
+
+	void
+	Validate(unsigned lineNumber,
+			ValidType * retType, string identifier) {
 		if(retType->varType_== RefVarType){
 			stringstream ss;
 			ss << "error: line " << lineNumber << ": ";
@@ -249,16 +282,6 @@ struct ExternNode : public ASTNode {
 		}
 
 		ASTNode::funcTable_[identifier] = vTypes;
-		}
-
-	ExternNode(unsigned lineNumber,
-			ValidType * retType,
-			string identifier,
-			TdeclsNode * tdeclsNode) :
-		retType_(retType), identifier_(identifier),
-		ASTNode(lineNumber) {
-		this->children_.push_back(tdeclsNode);
-
 	}
 
 	virtual ~ExternNode() {
@@ -475,29 +498,36 @@ struct ExistingFuncNode: public ASTNode {
 struct ExpressionNode: public ASTNode {
 	int constructorCase_ = 0;
 	Literal * literal_ = nullptr;
+//	ValidType * expResult_ = nullptr
 
 	ExpressionNode(unsigned lineNumber,
 			ExpressionNode * expressionNode) :
 		constructorCase_(0), ASTNode(lineNumber) {
 		this->children_.push_back(expressionNode);
+//		this->expResult_ = expressionNode->expResult_;
 	}
 
 	ExpressionNode(unsigned lineNumber,
 			BinaryOperationNode * binaryOperationNode) :
 		constructorCase_(1), ASTNode(lineNumber) {
 		this->children_.push_back(binaryOperationNode);
+//		ExpressionNode * exprNode = (ExpressionNode *)binaryOperationNode->children_[0];
+//		this->expResult_ = exprNode->expResult_;
 	}
 
 	ExpressionNode(unsigned lineNumber,
 			UnaryOperationNode * unaryOperationNode) :
 		constructorCase_(2), ASTNode(lineNumber) {
 		this->children_.push_back(unaryOperationNode);
+//		this->expResult_ = ((ExpressionNode *)unaryOperationNode->children_[0])->expResult_;
 	}
 
 	ExpressionNode(unsigned lineNumber,
 			Literal * literal) :
 		constructorCase_(3), literal_(literal),
-		ASTNode(lineNumber) {}
+		ASTNode(lineNumber) {
+//		this->expResult_ = literal_->type_
+	}
 
 	ExpressionNode(unsigned lineNumber,
 			ExistingVarNode * existingVarNode) :
@@ -523,7 +553,7 @@ struct ExpressionNode: public ASTNode {
 		if (hit==ASTNode::funcTable_.end()) {
 			stringstream ss;
 			ss << "error: line " << lineNumber << ": ";
-			ss << "variable identifier ";
+			ss << "function identifier ";
 			ss << existingFuncNode->identifier_;
 			ss << " not declared. \n";
 			ASTNode::compilerErrors_.push_back(ss.str());
@@ -538,6 +568,12 @@ struct ExpressionNode: public ASTNode {
 		this->children_.push_back(existingFuncNode);
 		for (auto node : expressionsNode->children_) {
 			this->children_.push_back(node);
+		}
+
+		FuncTableEntry hit = ASTNode::funcTable_.find(existingFuncNode->identifier_);
+		if (hit==ASTNode::funcTable_.end()) {
+			get<0>(recursiveFuncPlaceHolder_) = existingFuncNode->identifier_;
+			get<1>(recursiveFuncPlaceHolder_) = lineNumber;
 		}
 	}
 
@@ -895,10 +931,12 @@ struct FuncNode : public ASTNode {
 				ss << "return type of run function has to be int. \n";
 				ASTNode::compilerErrors_.push_back(ss.str());
 			}
+			ASTNode::runDefined_ = true;
 		}
 
 		vector< ValidType * > vTypes;
 		vTypes.push_back(retType);
+		CheckFuncTable(lineNumber, identifier);
 		ASTNode::funcTable_[identifier] = vTypes;
 	}
 
@@ -911,11 +949,10 @@ struct FuncNode : public ASTNode {
 		this->children_.push_back(vdeclsNode);
 		this->children_.push_back(blockNode);
 
-		
 		if(identifier == "run"){
 			stringstream ss;
 			ss << "error: line " << lineNumber << ": ";
-			ss << "run function can't take any argument. \n";
+			ss << "run function can't take any arguments. \n";
 			ASTNode::compilerErrors_.push_back(ss.str());
 		}
 
@@ -937,6 +974,13 @@ struct FuncNode : public ASTNode {
 			vTypes.push_back(((VdeclNode *)t)->type_);
 		}
 
+		CheckFuncTable(lineNumber, identifier);
+
+		ASTNode::funcTable_[identifier] = vTypes;
+	}
+
+	void
+	CheckFuncTable(unsigned lineNumber, string identifier) {
 		FuncTableEntry hit = ASTNode::funcTable_.find(identifier);
 		if (hit != ASTNode::funcTable_.end()) {
 			stringstream ss;
@@ -945,9 +989,20 @@ struct FuncNode : public ASTNode {
 			ss << identifier;
 			ss << "' already defined. \n";
 			ASTNode::compilerErrors_.push_back(ss.str());
+		} else {
+			int checkRecursiveLn = get<1>(ASTNode::recursiveFuncPlaceHolder_);
+			string checkRecursiveId = get<0>(ASTNode::recursiveFuncPlaceHolder_);
+			if (checkRecursiveLn!=-1 && identifier!=checkRecursiveId) {
+				stringstream ss;
+				ss << "error: line " << checkRecursiveLn << ": ";
+				ss << "function identifier ";
+				ss << checkRecursiveId;
+				ss << " not declared. \n";
+				ASTNode::compilerErrors_.push_back(ss.str());
+			}
 		}
-
-		ASTNode::funcTable_[identifier] = vTypes;
+		get<0>(ASTNode::recursiveFuncPlaceHolder_) = "";
+		get<1>(ASTNode::recursiveFuncPlaceHolder_) = -1;
 	}
 
 	virtual ~FuncNode() {

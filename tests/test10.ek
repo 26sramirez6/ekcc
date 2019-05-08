@@ -1,0 +1,16 @@
+
+# error: no run function defined
+
+def float func1 (ref float $x) {
+	if ($x>0.5) {
+		int $j = 0;
+		while ($j < 10) {
+			$x = $x + 3;
+		}
+		if ($x > 10) {
+			return 0.6;
+		}
+	}
+	
+	return 0.3;
+}

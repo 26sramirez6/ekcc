@@ -301,7 +301,10 @@ vector<string> ASTNode::compilerErrors_;
 vector<int> ASTNode::lineNumberErrors_;
 VarTable ASTNode::varTable_;
 FuncTable ASTNode::funcTable_;
-	
+tuple<string, int> ASTNode::recursiveFuncPlaceHolder_ = 
+		make_tuple("", -1);
+bool ASTNode::runDefined_ = false;
+
 int main(int argc, char ** argv) {
 	
 	CompilerConfig cfg(argc, argv);
@@ -319,7 +322,8 @@ int main(int argc, char ** argv) {
 	FILE * unit = fopen(cfg.inputFile_, "r");
 	// make sure it's valid:
 	if (!unit) {
-		cout << "Error opening file" << endl;
+		cout << "error: could not open " 
+				<< cfg.inputFile_ << endl;
 		return -1;
 	}
 	// Set flex to read from it instead of defaulting to STDIN:

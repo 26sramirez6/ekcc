@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS= -Wall -g3 -std=c++11 -Wno-reorder 
+CFLAGS= -Wall -g3 -std=c++11 -Wno-reorder -Wno-sign-compare -Wno-unused-function
 
 all: clean ekcc
 

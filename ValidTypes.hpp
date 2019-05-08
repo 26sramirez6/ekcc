@@ -41,6 +41,7 @@ enum LiteralTypes {
 };
 
 enum VariableTypes {
+	EmptyVarType,
 	IntVarType,
 	CintVarType,
 	StringVarType,
@@ -57,14 +58,16 @@ enum UnaryOperationTypes {
 };
 
 struct ValidType {
+	VariableTypes varType_;
+	ValidType() : varType_(EmptyVarType) {}
+	ValidType(VariableTypes varType) : varType_(varType) {}
+	virtual ~ValidType() {}
 	virtual string
 	GetName() = 0;
-	VariableTypes varType_;
-	virtual ~ValidType() {}
 };
 
 struct IntType : public ValidType {
-	VariableTypes varType_ = IntVarType;
+	IntType() : ValidType(IntVarType) {}
 	string
 	GetName() {
 		return string("int");
@@ -72,7 +75,7 @@ struct IntType : public ValidType {
 };
 
 struct FloatType : public ValidType {
-	VariableTypes varType_ = FloatVarType;
+	FloatType() : ValidType(FloatVarType) {}
 	string
 	GetName() {
 		return string("float");
@@ -80,7 +83,7 @@ struct FloatType : public ValidType {
 };
 
 struct CintType : public ValidType {
-	VariableTypes varType_ = CintVarType;
+	CintType() : ValidType(CintVarType) {}
 	string
 	GetName() {
 		return string("cint");
@@ -88,7 +91,7 @@ struct CintType : public ValidType {
 };
 
 struct BoolType : public ValidType {
-	VariableTypes varType_ = BooleanVarType;
+	BoolType() : ValidType(BooleanVarType) {}
 	string
 	GetName() {
 		return string("bool");
@@ -96,7 +99,7 @@ struct BoolType : public ValidType {
 };
 
 struct VoidType : public ValidType {
-	VariableTypes varType_ = VoidVarType;
+	VoidType() : ValidType(VoidVarType) {}
 	string
 	GetName() {
 		return string("void");
@@ -104,14 +107,14 @@ struct VoidType : public ValidType {
 };
 
 struct RefType : public ValidType {
-	VariableTypes varType_ = RefVarType;
     bool noAlias_ = false;
 	bool invalidConstructor_ = false;
     ValidType * referredType_ = nullptr;
 
-    RefType() {}
+    RefType() : ValidType(RefVarType) {}
     RefType(bool noAlias, ValidType * referredType) :
-    	noAlias_(noAlias), referredType_(referredType) {
+    	noAlias_(noAlias), referredType_(referredType),
+		ValidType(RefVarType) {
 		// Check: a ref type may not contain a 'ref' or 'void' type.
 		this->invalidConstructor_ = referredType->varType_ == RefVarType ||
 			referredType->varType_ == VoidVarType;
@@ -138,23 +141,25 @@ struct RefType : public ValidType {
 };
 
 struct ControlFlow {
-	ControlTypes controlType_ = EmptyControl;
+	ControlTypes controlType_;
+	ControlFlow(): controlType_(EmptyControl) {}
+	ControlFlow(ControlTypes controlType): controlType_(controlType) {}
 };
 
 struct IfControl: ControlFlow {
-	ControlTypes controlType_ = If;
+	IfControl() : ControlFlow(If) {}
 };
 
 struct ElseControl : ControlFlow {
-	ControlTypes controlType_ = IfElse;
+	ElseControl() : ControlFlow(IfElse) {}
 };
 
 struct WhileControl : ControlFlow {
-	ControlTypes controlType_ = While;
+	WhileControl() : ControlFlow(While) {}
 };
 
 struct ReturnControl : ControlFlow {
-	ControlTypes controlType_ = Return;
+	ReturnControl() : ControlFlow(Return) {}
 };
 
 struct LiteralValue {
