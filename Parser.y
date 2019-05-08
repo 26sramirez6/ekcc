@@ -300,7 +300,7 @@ bool ASTNode::ready_ = false;
 vector<string> ASTNode::compilerErrors_;
 vector<int> ASTNode::lineNumberErrors_;
 VarTable ASTNode::varTable_;
-FuncTable ASTNode::funcScope_;
+FuncTable ASTNode::funcTable_;
 	
 int main(int argc, char ** argv) {
 	
