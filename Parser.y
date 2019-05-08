@@ -86,7 +86,6 @@
 %token <returnControl> T_CONTROL_RETURN
 
 %token <printFunction> T_FUNCTION_PRINT
-%token <runFunction> T_FUNCTION_RUN
 %token <defFunction> T_FUNCTION_DEF
 %token <externFunction> T_FUNCTION_EXTERN 
 
@@ -184,7 +183,6 @@ funcs:
 func:
   T_FUNCTION_DEF type T_IDENT "(" ")" blk { $$ = new FuncNode(lineNumber,$2, $3, $6); }
   | T_FUNCTION_DEF type T_IDENT "(" vdecls ")" blk { $$ = new FuncNode(lineNumber,$2, $3, $5, $7); }
-  | T_FUNCTION_DEF type T_FUNCTION_RUN "(" ")" blk { $$ = new FuncNode(lineNumber,$2, "run", $6); }
   ;
 
 blk:

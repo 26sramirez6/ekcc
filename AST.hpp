@@ -32,7 +32,7 @@ struct ASTNode {
 	static bool ready_;
 	static vector< string > compilerErrors_;
 	static vector< int > lineNumberErrors_;
-	static FuncTable funcScope_;
+	static FuncTable funcTable_;
 	static VarTable varTable_;
 	vector< ASTNode * > children_;
 	unsigned lineNumber_;
@@ -108,13 +108,12 @@ struct VdeclNode : public ASTNode {
 	VdeclNode(unsigned lineNumber, ValidType * type, string identifier) :
 		type_(type), identifier_(identifier.substr(1, string::npos)),
 		ASTNode(lineNumber) {
-//		VarTable top = ASTNode::scopeStack_.back();
 		if (ASTNode::varTable_.end() != ASTNode::varTable_.find(identifier_)) {
 			stringstream ss;
 			ss << "error: line " << lineNumber;
 			ss << ": variable identifier ";
 			ss << identifier_;
-			ss << " already defined\n";
+			ss << " already defined. \n";
 			ASTNode::compilerErrors_.push_back(ss.str());
 		}
 		ASTNode::varTable_[identifier_] = type;
@@ -125,7 +124,7 @@ struct VdeclNode : public ASTNode {
 			ss << "error: line " << lineNumber;
 			ss << ": variable identifier ";
 			ss << identifier_;
-			ss << " cannot be void\n";
+			ss << " cannot be void. \n";
 			this->compilerErrors_.push_back(ss.str());
 		}
 
@@ -221,7 +220,30 @@ struct ExternNode : public ASTNode {
 	ExternNode(unsigned lineNumber,
 			ValidType * retType, string identifier) :
 		retType_(retType), identifier_(identifier),
-		ASTNode(lineNumber) { }
+		ASTNode(lineNumber) { 
+
+		if(retType->varType_== RefVarType){
+			stringstream ss;
+			ss << "error: line " << lineNumber << ": ";
+			ss << "function return type can't be ref. \n";
+			ASTNode::compilerErrors_.push_back(ss.str());
+		}
+
+		vector< ValidType * > vTypes;
+		vTypes.push_back(retType);
+
+		FuncTableEntry hit = ASTNode::funcTable_.find(identifier);
+		if (hit != ASTNode::funcTable_.end()) {
+			stringstream ss;
+			ss << "error: line " << lineNumber << ": ";
+			ss << "function identifier '";
+			ss << identifier;
+			ss << "' already defined. \n";
+			ASTNode::compilerErrors_.push_back(ss.str());
+		}
+
+		ASTNode::funcTable_[identifier] = vTypes;
+		}
 
 	ExternNode(unsigned lineNumber,
 			ValidType * retType,
@@ -408,14 +430,13 @@ struct ExistingVarNode: public ASTNode {
 	string identifier_;
 	ExistingVarNode(unsigned lineNumber, string identifier) :
 	identifier_(identifier.substr(1, string::npos)), ASTNode(lineNumber) {
-//		VarTable top = ASTNode::scopeStack_.back();
 		VarTableEntry hit = ASTNode::varTable_.find(this->identifier_);
 		if (hit==ASTNode::varTable_.end()) {
 			stringstream ss;
 			ss << "error: line " << lineNumber << ": ";
 			ss << "variable identifier ";
 			ss << identifier_;
-			ss << " not declared\n";
+			ss << " not declared. \n";
 			ASTNode::compilerErrors_.push_back(ss.str());
 		}
 	}
@@ -475,12 +496,32 @@ struct ExpressionNode: public ASTNode {
 	ExpressionNode(unsigned lineNumber,
 			ExistingVarNode * existingVarNode) :
 		constructorCase_(4), ASTNode(lineNumber) {
+
+		VarTableEntry hit = ASTNode::varTable_.find(existingVarNode->identifier_);
+		if (hit==ASTNode::varTable_.end()) {
+			stringstream ss;
+			ss << "error: line " << lineNumber << ": ";
+			ss << "variable identifier ";
+			ss << existingVarNode->identifier_;
+			ss << " not declared. \n";
+			ASTNode::compilerErrors_.push_back(ss.str());
+		}
 		this->children_.push_back(existingVarNode);
 	}
 
 	ExpressionNode(unsigned lineNumber,
 			ExistingFuncNode * existingFuncNode) :
 		constructorCase_(5), ASTNode(lineNumber) {
+
+		FuncTableEntry hit = ASTNode::funcTable_.find(existingFuncNode->identifier_);
+		if (hit==ASTNode::funcTable_.end()) {
+			stringstream ss;
+			ss << "error: line " << lineNumber << ": ";
+			ss << "variable identifier ";
+			ss << existingFuncNode->identifier_;
+			ss << " not declared. \n";
+			ASTNode::compilerErrors_.push_back(ss.str());
+		}
 		this->children_.push_back(existingFuncNode);
 	}
 
@@ -640,6 +681,16 @@ struct StatementNode: public ASTNode {
 		this->varDecl_ = dynamic_cast<VdeclNode *>(vdeclNode);
 		this->children_.push_back(vdeclNode);
 		this->children_.push_back(expressionNode);
+
+		VdeclNode * vdeclNode_ = (VdeclNode *) vdeclNode;
+		if(vdeclNode_->type_->varType_ == RefVarType){
+			if(expressionNode->constructorCase_ != 4){
+				stringstream ss;
+				ss << "error: line " << lineNumber << ": ";
+				ss << "ref variable must be initialized with a variable.\n";
+				ASTNode::compilerErrors_.push_back(ss.str());
+			}
+		}
 	}
 
 	StatementNode(unsigned lineNumber,
@@ -790,21 +841,12 @@ struct StatementsNode: public ASTNode {
 
 struct BlockNode: public ASTNode {
 	BlockNode(unsigned lineNumber): ASTNode(lineNumber) {
-//		assert(!ASTNode::scopeStack_.empty());
-//		if (!ASTNode::scopeStack_.empty()) {
-//			ASTNode::scopeStack_.pop_back();
-//		}
 	}
 
 	BlockNode(unsigned lineNumber, ASTNode * statementsNode) :
 		ASTNode(lineNumber) {
 
 		this->children_.push_back(statementsNode);
-
-//		assert(!ASTNode::scopeStack_.empty());
-//		if (!ASTNode::scopeStack_.empty()) {
-//			ASTNode::scopeStack_.pop_back();
-//		}
 
 		for(auto node : statementsNode->children_){
 			StatementNode * sNode = (StatementNode *) node;
@@ -838,11 +880,21 @@ struct FuncNode : public ASTNode {
 			ValidType * retType, string identifier,
 		BlockNode * blockNode) : retType_(retType),
 				identifier_(identifier), ASTNode(lineNumber) {
+
 		this->children_.push_back(blockNode);
+
+		if(identifier == "run"){
+			if(retType->varType_ != IntVarType){
+				stringstream ss;
+				ss << "error: line " << lineNumber << ": ";
+				ss << "return type of run function has to be int. \n";
+				ASTNode::compilerErrors_.push_back(ss.str());
+			}
+		}
 
 		vector< ValidType * > vTypes;
 		vTypes.push_back(retType);
-		ASTNode::funcScope_[identifier] = vTypes;
+		ASTNode::funcTable_[identifier] = vTypes;
 	}
 
 	FuncNode(unsigned lineNumber,
@@ -854,9 +906,24 @@ struct FuncNode : public ASTNode {
 		this->children_.push_back(vdeclsNode);
 		this->children_.push_back(blockNode);
 
+		
+		if(identifier == "run"){
+			stringstream ss;
+			ss << "error: line " << lineNumber << ": ";
+			ss << "run function can't take any argument. \n";
+			ASTNode::compilerErrors_.push_back(ss.str());
+		}
+
 		for(auto node : vdeclsNode->children_){
 			VdeclNode * vNode = (VdeclNode *) node;
 			ASTNode::varTable_.erase(vNode->identifier_);
+		}
+
+		if(retType->varType_== RefVarType){
+			stringstream ss;
+			ss << "error: line " << lineNumber << ": ";
+			ss << "function return type can't be ref. \n";
+			ASTNode::compilerErrors_.push_back(ss.str());
 		}
 
 		vector< ValidType * > vTypes;
@@ -865,17 +932,17 @@ struct FuncNode : public ASTNode {
 			vTypes.push_back(((VdeclNode *)t)->type_);
 		}
 
-		FuncTableEntry hit = ASTNode::funcScope_.find(identifier);
-		if (hit != ASTNode::funcScope_.end()) {
+		FuncTableEntry hit = ASTNode::funcTable_.find(identifier);
+		if (hit != ASTNode::funcTable_.end()) {
 			stringstream ss;
 			ss << "error: line " << lineNumber << ": ";
 			ss << "function identifier '";
 			ss << identifier;
-			ss << "' already defined\n";
+			ss << "' already defined. \n";
 			ASTNode::compilerErrors_.push_back(ss.str());
 		}
 
-		ASTNode::funcScope_[identifier] = vTypes;
+		ASTNode::funcTable_[identifier] = vTypes;
 	}
 
 	virtual ~FuncNode() {
