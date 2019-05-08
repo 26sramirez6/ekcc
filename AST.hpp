@@ -115,19 +115,25 @@ struct VdeclNode : public ASTNode {
 			ss << identifier_;
 			ss << " already defined. \n";
 			ASTNode::compilerErrors_.push_back(ss.str());
-		}
-		ASTNode::varTable_[identifier_] = type;
-
-		// Check: <vdecl> may not have void type.
-		if(type->varType_ == VoidVarType){
+		} else if (type->varType_ == VoidVarType){
 			stringstream ss;
 			ss << "error: line " << lineNumber;
 			ss << ": variable identifier ";
 			ss << identifier_;
 			ss << " cannot be void. \n";
-			this->compilerErrors_.push_back(ss.str());
+			ASTNode::compilerErrors_.push_back(ss.str());
+		} else if (type->varType_==RefVarType) {
+			RefType * refType = (RefType *) type;
+			if (refType->invalidConstructor_) {
+				stringstream ss;
+				ss << "error: line " << lineNumber;
+				ss << ": variable identifier ";
+				ss << identifier_;
+				ss << " is a ref and points to a ref.\n";
+				ASTNode::compilerErrors_.push_back(ss.str());
+			}
 		}
-
+		ASTNode::varTable_[identifier_] = type;
 	}
 
 	void
@@ -682,8 +688,7 @@ struct StatementNode: public ASTNode {
 		this->children_.push_back(vdeclNode);
 		this->children_.push_back(expressionNode);
 
-		VdeclNode * vdeclNode_ = (VdeclNode *) vdeclNode;
-		if(vdeclNode_->type_->varType_ == RefVarType){
+		if(this->varDecl_->type_->varType_ == RefVarType){
 			if(expressionNode->constructorCase_ != 4){
 				stringstream ss;
 				ss << "error: line " << lineNumber << ": ";

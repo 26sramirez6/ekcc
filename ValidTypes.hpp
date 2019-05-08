@@ -106,17 +106,15 @@ struct VoidType : public ValidType {
 struct RefType : public ValidType {
 	VariableTypes varType_ = RefVarType;
     bool noAlias_ = false;
+	bool invalidConstructor_ = false;
     ValidType * referredType_ = nullptr;
 
     RefType() {}
     RefType(bool noAlias, ValidType * referredType) :
     	noAlias_(noAlias), referredType_(referredType) {
 		// Check: a ref type may not contain a 'ref' or 'void' type.
-		if(referredType->varType_ == RefVarType){
-			cout << "error: ref type point to another ref." << endl;
-		}else if(referredType->varType_ == VoidVarType){
-			cout << "error: ref type can't be void." << endl;
-		}
+		this.invalidConstructor_ = referredType->varType_ == RefVarType || 
+			referredType->varType_ == VoidVarType;
 	}
 
     ~RefType() {
