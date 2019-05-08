@@ -3,7 +3,7 @@ def int run () {
 	$float j = 5;
 	if (true) {
 		if (x + j == 8) {
-			print "inner if"
+			print "inner if";
 		}
 		void $y;
 	}
