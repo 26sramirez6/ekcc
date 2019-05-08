@@ -30,7 +30,6 @@
 "return"          { return T_CONTROL_RETURN; }
 
 "print"           { return T_FUNCTION_PRINT; }
-"run"             { return T_FUNCTION_RUN; }
 "def"             { return T_FUNCTION_DEF; }
 "extern"          { return T_FUNCTION_EXTERN; }
 
