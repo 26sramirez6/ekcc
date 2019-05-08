@@ -113,7 +113,7 @@ struct RefType : public ValidType {
     RefType(bool noAlias, ValidType * referredType) :
     	noAlias_(noAlias), referredType_(referredType) {
 		// Check: a ref type may not contain a 'ref' or 'void' type.
-		this.invalidConstructor_ = referredType->varType_ == RefVarType || 
+		this->invalidConstructor_ = referredType->varType_ == RefVarType ||
 			referredType->varType_ == VoidVarType;
 	}
 
