@@ -1,0 +1,9 @@
+def void run () { # error, incorrect run function
+    if (false)
+        if (true)
+            print "inner if";
+        else
+            print "inner else";
+
+    return 7;
+}

@@ -1,0 +1,12 @@
+def int run () {
+	$int x = 3;
+	$float j = 5;
+	if (true) {
+		if (x + j == 8) {
+			print "inner if"
+		}
+		void $y;
+	}
+	return 0;
+}
+

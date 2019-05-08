@@ -1,7 +1,10 @@
 CC=g++
-CFLAGS= -Wall -g3 -std=c++11 -Wno-reorder #-Wextra -Wno-deprecated-register -Wno-unused-parameter -Wno-unneeded-internal-declaration -Wno-unused-function -Wno-sign-compare 
+CFLAGS= -Wall -g3 -std=c++11 -Wno-reorder 
 
 all: clean ekcc
+
+test: clean ekcc
+	@python3 ./tests/run-tests.py
 
 valgrind: clean ekcc 
 	valgrind --leak-check=full --track-origins=yes --log-file="valgrind.out" --show-reachable=yes -v ./ekcc
@@ -26,3 +29,4 @@ Parser.hpp: Parser.cpp
 
 clean:
 	rm -f *.o *~ Lexer.cpp Lexer.hpp Parser.cpp Parser.hpp ekcc
+	rm -r -f out

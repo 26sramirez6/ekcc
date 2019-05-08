@@ -1,0 +1,9 @@
+def int sum (int $x, int $y) {
+	return $x + $y;
+}
+
+def int run () {
+	float $j = 8.3;
+	int $r = sum(4, 5);
+	ref float $y = 5.6; #error, ref must be a variable
+}

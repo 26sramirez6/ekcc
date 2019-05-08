@@ -1,0 +1,19 @@
+def float func1 (ref float $x) {
+	if ($x>0.5) {
+		int $j = 0;
+		while ($j < 10) {
+			$x = $x + 3;
+		}
+		if ($x > 10) {
+			return 0.6;
+		}
+	}
+	
+	return 0.3;
+}
+
+def int run () {
+	int $x = 4;
+	ref int $j = $x;
+	ref ref $y = $j; # error 
+}

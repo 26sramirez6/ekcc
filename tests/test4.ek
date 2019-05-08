@@ -1,0 +1,25 @@
+def int sum (int $x, int $y) {
+	return $x + $y;
+}
+
+# error: returns ref type
+def ref float func3 (ref float $x) {
+	if ($x>0.5) {
+		int $j = 0;
+		while ($j < 10) {
+			$x = $x + 3;
+		}
+		if ($x > 10) {
+			return $x;
+		}
+	}
+	
+	return $x;
+}
+
+def int run () {
+	float $j = 8.3;
+	ref float $y = $j;
+	func3($y);
+	sum(4, 5);
+}
