@@ -1,5 +1,7 @@
 %{
     #include <stdio.h>
+    #include <unistd.h>
+    #include <sys/wait.h>
     #include <cstdio>
     #include <iostream>
     #include <string>
@@ -24,6 +26,8 @@
 
 %code requires {
     #include <stdio.h>
+    #include <unistd.h>
+    #include <sys/wait.h>
     #include <cstdio>
     #include <iostream>
     #include <string>
@@ -305,7 +309,20 @@ tuple<string, int> ASTNode::recursiveFuncPlaceHolder_ =
 		make_tuple("", -1);
 bool ASTNode::runDefined_ = false;
 
-int main(int argc, char ** argv) {
+// static assert that CLANG_BINARY defined
+#define Q(x) #x
+#define QUOTE(x) Q(x)
+#ifdef CLANG_BINARY
+#define QUOTED_CLANG_BINARY QUOTE(CLANG_BINARY)
+#endif
+
+#ifndef QUOTED_CLANG_BINARY 
+	static_assert(false, "QOUTED_CLANG_BINARY not defined");
+#endif
+
+	
+int 
+main(int argc, char ** argv) {
 	
 	CompilerConfig cfg(argc, argv);
 	if (!cfg.properConfig_) {
@@ -335,19 +352,52 @@ int main(int argc, char ** argv) {
 	// Parse through the input:
 	yyparse(&root);
 	
-	// set up the string stream
-	stringstream ss;
-	
 	// Print the AST Tree
-	root->PrintRecursive(ss, 0);	
-	ofstream out(cfg.outputFile_);
-	out << ss.str() << "\n...";
-	out.close();
+	if (cfg.emitAST_) {
+		// set up the string stream
+		stringstream ssAST;
+		root->PrintRecursive(ssAST, 0);
+		cout << ssAST.str() << "\n...";
+	}
 	
 	if (root->HasCompilerErrors()) {
 		cout << root->GetCompilerErrors() << endl;
 		return 1;
 	}
+	
+	stringstream ssIR;
+	root->GenerateCode(ssIR);
+	if (cfg.emitLLVM_) {
+		cout << ssIR.str() << endl;
+	}
+	
+	if (!cfg.outputFile_.empty()) {
+		ofstream out(cfg.outputFile_ + ".ll");
+		out << ssIR.str() << endl;
+		out.close();
+		
+		int rv = fork();
+		if (rv < 0) {
+			cerr << "error: fork failed\n";
+			return 1;
+		} else if (rv==0) { //child
+			const char * args[4];
+			args[0] = strdup(QUOTED_CLANG_BINARY);
+			args[1] = (cfg.outputFile_ + ".ll").c_str();
+			args[2] = strdup("-o");
+			args[3] = cfg.outputFile_.c_str();
+	//		cout << "child executing: " <<
+	//			args[0] << " " <<
+	//			args[1] << " " <<
+	//			args[2] << " " <<
+	//			args[3] << endl;
+			execvp((const char *)args[0], (char* const*)args);
+		} else { // parent
+			wait(NULL);
+		}
+	}	
+	
+	
 	
 	return 0;
 }

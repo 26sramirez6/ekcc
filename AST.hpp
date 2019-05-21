@@ -14,6 +14,7 @@
 #include<sstream>
 #include<unordered_map>
 #include<tuple>
+#include<memory>
 #include<assert.h>
 
 #include "llvm/ADT/APFloat.h"
@@ -35,11 +36,15 @@ using std::stringstream;
 using std::unordered_map;
 using std::tuple;
 using std::get;
-typedef std::unordered_map<string, ValidType *> VarTable;
-typedef std::unordered_map<string, ValidType *>::const_iterator VarTableEntry;
-typedef std::unordered_map<string, vector< ValidType * > > FuncTable;
-typedef std::unordered_map<string, vector< ValidType * > >::const_iterator FuncTableEntry;
-//typedef std::vector<VarTable> ScopeStack;
+using std::unique_ptr;
+typedef unordered_map<string, tuple<ValidType *, llvm::Value *>> VarTable;
+typedef unordered_map<string, tuple<ValidType *, llvm::Value * >>::const_iterator VarTableEntry;
+typedef unordered_map<string, tuple<vector< ValidType * >, llvm::Function *> > FuncTable;
+typedef unordered_map<string, tuple<vector< ValidType * >, llvm::Function *> >::const_iterator FuncTableEntry;
+
+static llvm::LLVMContext TheContext;
+static llvm::IRBuilder<> Builder(TheContext);
+static llvm::Module * TheModule;
 
 struct ASTNode {
 	static ASTNode * root_;
@@ -59,10 +64,16 @@ struct ASTNode {
 	virtual void
 	PrintRecursive(stringstream& ss, unsigned depth) {};
 
-	virtual ~ASTNode() {
+	virtual
+	~ASTNode() {
 		for (auto n : this->children_) {
 			delete n;
 		}
+	}
+
+	virtual llvm::Value *
+	GenerateCode(stringstream& ss) {
+
 	}
 
 	static void
@@ -157,7 +168,7 @@ struct VdeclNode : public ASTNode {
 				ASTNode::compilerErrors_.push_back(ss.str());
 			}
 		}
-		ASTNode::varTable_[identifier_] = type;
+		get<0>(ASTNode::varTable_[identifier_]) = type;
 	}
 
 	void
@@ -292,7 +303,7 @@ struct ExternNode : public ASTNode {
 			ASTNode::compilerErrors_.push_back(ss.str());
 		}
 
-		ASTNode::funcTable_[identifier] = vTypes;
+		get<0>(ASTNode::funcTable_[identifier]) = vTypes;
 	}
 
 	virtual ~ExternNode() {
@@ -731,7 +742,7 @@ struct StatementNode: public ASTNode {
 			ExpressionNode * expressionNode) :
 			stmtName_("vardeclstmt"),
 			constructorCase_(3), ASTNode(lineNumber) {
-		this->varDecl_ = dynamic_cast<VdeclNode *>(vdeclNode);
+		this->varDecl_ = (VdeclNode *)(vdeclNode);
 		this->children_.push_back(vdeclNode);
 		this->children_.push_back(expressionNode);
 
@@ -948,7 +959,7 @@ struct FuncNode : public ASTNode {
 		vector< ValidType * > vTypes;
 		vTypes.push_back(retType);
 		CheckFuncTable(lineNumber, identifier);
-		ASTNode::funcTable_[identifier] = vTypes;
+		get<0>(ASTNode::funcTable_[identifier]) = vTypes;
 	}
 
 	FuncNode(unsigned lineNumber,
@@ -987,7 +998,7 @@ struct FuncNode : public ASTNode {
 
 		CheckFuncTable(lineNumber, identifier);
 
-		ASTNode::funcTable_[identifier] = vTypes;
+		get<0>(ASTNode::funcTable_[identifier]) = vTypes;
 	}
 
 	void
