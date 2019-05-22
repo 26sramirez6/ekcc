@@ -81,6 +81,33 @@ struct ValidType {
 
 	virtual llvm::Type *
 	GetLLVMType() = 0;
+
+	static VariableTypes
+	ConvertLiteralToVariableType(LiteralTypes in) {
+		switch (in) {
+		case EmptyLiteral: return EmptyVarType;
+		case StringLiteral: return StringVarType;
+		case IntLiteral: return IntVarType;
+		case FloatLiteral: return FloatVarType;
+		case BooleanLiteral: return BooleanVarType;
+		}
+		return EmptyVarType;
+	}
+
+	static llvm::Type *
+	ConvertVariableTypeToLLVMType(VariableTypes in) {
+		switch (in) {
+		case EmptyVarType: return nullptr;
+		case IntVarType: return llvm::Type::getInt32Ty(GlobalContext);
+		case CintVarType: return llvm::Type::getInt32Ty(GlobalContext);
+		case StringVarType: return nullptr;
+		case FloatVarType: return llvm::Type::getFloatTy(GlobalContext);
+		case BooleanVarType: return llvm::Type::getInt1Ty(GlobalContext);
+		case RefVarType: return nullptr;
+		case VoidVarType: return llvm::Type::getVoidTy(GlobalContext);
+		}
+		return nullptr;
+	}
 };
 
 struct IntType : public ValidType {
