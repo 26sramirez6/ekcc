@@ -1,0 +1,6 @@
+
+# no error: ref types - local variables
+
+def int run() {
+	return 4;
+}

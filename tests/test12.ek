@@ -1,0 +1,9 @@
+# error: returning int when prototype return type is ref int
+def ref int someF() {
+    int $y = 10;
+    return $y;
+}
+
+def int run () {
+    return 0;
+}

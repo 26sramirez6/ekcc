@@ -4,6 +4,20 @@
 #include <iostream>
 #include <memory>
 
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Verifier.h"
+
+#include "LLVMGlobals.hpp"
+
 using std::cout;
 using std::endl;
 using std::string;
@@ -64,6 +78,9 @@ struct ValidType {
 	virtual ~ValidType() {}
 	virtual string
 	GetName() = 0;
+
+	virtual llvm::Type *
+	GetLLVMType() = 0;
 };
 
 struct IntType : public ValidType {
@@ -71,6 +88,11 @@ struct IntType : public ValidType {
 	string
 	GetName() {
 		return string("int");
+	}
+
+	llvm::Type *
+	GetLLVMType() {
+		return llvm::Type::getInt32Ty(GlobalContext);
 	}
 };
 
@@ -80,6 +102,11 @@ struct FloatType : public ValidType {
 	GetName() {
 		return string("float");
 	}
+
+	llvm::Type *
+	GetLLVMType() {
+		return llvm::Type::getFloatTy(GlobalContext);
+	}
 };
 
 struct CintType : public ValidType {
@@ -87,6 +114,11 @@ struct CintType : public ValidType {
 	string
 	GetName() {
 		return string("cint");
+	}
+
+	llvm::Type *
+	GetLLVMType() {
+		return llvm::Type::getInt32Ty(GlobalContext);
 	}
 };
 
@@ -96,6 +128,11 @@ struct BoolType : public ValidType {
 	GetName() {
 		return string("bool");
 	}
+
+	llvm::Type *
+	GetLLVMType() {
+		return llvm::Type::getInt1Ty(GlobalContext);
+	}
 };
 
 struct VoidType : public ValidType {
@@ -103,6 +140,11 @@ struct VoidType : public ValidType {
 	string
 	GetName() {
 		return string("void");
+	}
+
+	llvm::Type *
+	GetLLVMType() {
+		return llvm::Type::getVoidTy(GlobalContext);
 	}
 };
 
@@ -113,8 +155,7 @@ struct RefType : public ValidType {
 
     RefType() : ValidType(RefVarType) {}
     RefType(bool noAlias, ValidType * referredType) :
-    	noAlias_(noAlias), referredType_(referredType),
-		ValidType(RefVarType) {
+    	ValidType(RefVarType), noAlias_(noAlias), referredType_(referredType) {
 		// Check: a ref type may not contain a 'ref' or 'void' type.
 		this->invalidConstructor_ = referredType->varType_ == RefVarType ||
 			referredType->varType_ == VoidVarType;
@@ -136,6 +177,34 @@ struct RefType : public ValidType {
 		}else{
 			return string("ref ") + this->referredType_->GetName();
 		}
+	}
+
+    llvm::Type *
+	GetLLVMType() {
+    	llvm::Type * ret = nullptr;
+    	switch (this->referredType_->varType_) {
+    	case IntVarType:
+    		ret = llvm::Type::getInt32PtrTy(GlobalContext, 0);
+    		break;
+    	case CintVarType:
+    		ret = llvm::Type::getInt32PtrTy(GlobalContext, 0);
+    		break;
+    	case StringVarType:
+    		break;
+    	case FloatVarType:
+    		ret = llvm::Type::getFloatPtrTy(GlobalContext, 0);
+    		break;
+    	case BooleanVarType:
+    		ret = llvm::Type::getInt1PtrTy(GlobalContext, 0);
+    		break;
+    	case VoidVarType:
+    		break;
+    	case EmptyVarType:
+    		break;
+    	case RefVarType:
+    		break;
+    	}
+		return ret;
 	}
 
 };

@@ -1,5 +1,5 @@
 CC=clang++
-CFLAGS= -Wall -g3 -std=c++1z -Wno-reorder -Wno-sign-compare -Wno-unused-function
+CFLAGS= -Wall -g3 -std=c++1z -Wno-sign-compare -Wno-unused-function -Wno-unused-command-line-argument -Wno-reorder -Wno-cast-qual
 LLVM_CONFIG=--cxxflags --ldflags --system-libs --libs core
 
 # NOTE: SET THIS VARIABLE!!
@@ -13,7 +13,7 @@ test: clean ekcc
 	@python3 ./tests/run-tests.py
 
 test11: clean ekcc
-	./ekcc test11.ek -o test11
+	./ekcc -emit-llvm ./tests/test11.ek -o test11
 
 valgrind: clean ekcc 
 	valgrind --leak-check=full --track-origins=yes --log-file="valgrind.out" --show-reachable=yes -v ./ekcc
@@ -21,16 +21,16 @@ valgrind: clean ekcc
 ekcc: Lexer.o Parser.o
 	$(COMPILE_CMD) $(CFLAGS) $^ $(LLVM_CONFIG_CMD) -lfl -D CLANG_BINARY="$(COMPILE_CMD)" -o $@
 	
-Lexer.o: Lexer.cpp Parser.cpp AST.hpp CompilerConfig.hpp
+Lexer.o: Lexer.cpp Parser.cpp AST.hpp CompilerConfig.hpp LLVMGlobals.hpp
 	$(COMPILE_CMD) $(CFLAGS) -c $< $(LLVM_CONFIG_CMD) -D CLANG_BINARY="$(COMPILE_CMD)" -o $@
 
-Parser.o: Parser.cpp Lexer.cpp AST.hpp CompilerConfig.hpp
+Parser.o: Parser.cpp Lexer.cpp AST.hpp CompilerConfig.hpp LLVMGlobals.hpp
 	$(COMPILE_CMD) $(CFLAGS) -c $< $(LLVM_CONFIG_CMD) -D CLANG_BINARY=$(COMPILE_CMD) -o $@
 
-Lexer.cpp: Lexer.l Parser.y ValidTypes.hpp AST.hpp CompilerConfig.hpp
+Lexer.cpp: Lexer.l Parser.y ValidTypes.hpp AST.hpp CompilerConfig.hpp LLVMGlobals.hpp
 	flex --header-file=Lexer.hpp --outfile=$@ Lexer.l
 
-Parser.cpp: Parser.y Lexer.cpp ValidTypes.hpp AST.hpp CompilerConfig.hpp
+Parser.cpp: Parser.y Lexer.cpp ValidTypes.hpp AST.hpp CompilerConfig.hpp LLVMGlobals.hpp
 	bison -o $@ --defines=Parser.hpp Parser.y
 
 Parser.hpp: Parser.cpp

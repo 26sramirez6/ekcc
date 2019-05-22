@@ -348,6 +348,7 @@ main(int argc, char ** argv) {
 	
 	// Set up the root tree
 	ProgramNode * root;
+	ASTNode::StaticInit(cfg.inputFile_);
 	
 	// Parse through the input:
 	yyparse(&root);
@@ -365,8 +366,9 @@ main(int argc, char ** argv) {
 		return 1;
 	}
 	
-	stringstream ssIR;
-	root->GenerateCode(ssIR);
+	string stringIR("");
+	llvm::raw_string_ostream ssIR(stringIR);
+	root->GenerateCodeRecursive(ssIR);
 	if (cfg.emitLLVM_) {
 		cout << ssIR.str() << endl;
 	}
@@ -381,16 +383,17 @@ main(int argc, char ** argv) {
 			cerr << "error: fork failed\n";
 			return 1;
 		} else if (rv==0) { //child
-			const char * args[4];
+			const char * args[5];
 			args[0] = strdup(QUOTED_CLANG_BINARY);
 			args[1] = (cfg.outputFile_ + ".ll").c_str();
 			args[2] = strdup("-o");
 			args[3] = cfg.outputFile_.c_str();
-	//		cout << "child executing: " <<
-	//			args[0] << " " <<
-	//			args[1] << " " <<
-	//			args[2] << " " <<
-	//			args[3] << endl;
+			args[4] = NULL;
+			cout << "child executing: " <<
+				args[0] << " " <<
+				args[1] << " " <<
+				args[2] << " " <<
+				args[3] << endl;
 			execvp((const char *)args[0], (char* const*)args);
 		} else { // parent
 			wait(NULL);

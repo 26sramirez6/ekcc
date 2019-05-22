@@ -1,0 +1,12 @@
+# error: cant assign literal to ref
+
+def void someF (ref int $z) {
+    return;
+}
+
+def int run () {
+    
+    someF( 17 );
+    
+    return 0;
+}
