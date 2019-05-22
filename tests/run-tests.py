@@ -18,16 +18,15 @@ true_outputs = [
 1, #test 10 
 1, #test 11
 1, #test 12
-(0,4) #test 13
+(0,4), #test 13
+(0,9)  #test 14
 ]
 total_passed = 0
 failed = []
 for i in range(1,len(true_outputs)+1):
     print("---------TEST {0}----------".format(i))
     if i < 13:
-        pipe = Popen(["./ekcc", "-o", 
-                      "./out/test{0}.yaml".format(i), 
-                      "./tests/test{0}.ek".format(i)], 
+        pipe = Popen(["./ekcc", "./tests/test{0}.ek".format(i)], 
                       stdout=PIPE)
                       
         test_output = pipe.communicate()[0].decode("utf-8")
