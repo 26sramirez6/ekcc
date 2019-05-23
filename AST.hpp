@@ -38,8 +38,8 @@ using std::unordered_map;
 using std::tuple;
 using std::get;
 using std::unique_ptr;
-typedef unordered_map<string, tuple<ValidType *, llvm::Value *>> VarTable;
-typedef unordered_map<string, tuple<ValidType *, llvm::Value * >>::const_iterator VarTableEntry;
+typedef unordered_map<string, tuple<ValidType *, llvm::AllocaInst *>> VarTable;
+typedef unordered_map<string, tuple<ValidType *, llvm::AllocaInst * >>::const_iterator VarTableEntry;
 typedef unordered_map<string, tuple<vector< ValidType * >, llvm::Function *> > FuncTable;
 typedef unordered_map<string, tuple<vector< ValidType * >, llvm::Function *> >::const_iterator FuncTableEntry;
 
@@ -93,9 +93,9 @@ struct ASTNode {
 	}
 
 	virtual llvm::Value *
-	GenerateCode() {
+	GenerateCode(llvm::BasicBlock * endBlock) {
 		for (auto n: this->children_) {
-			n->GenerateCode();
+			n->GenerateCode(endBlock);
 		}
 		return nullptr;
 	}
@@ -154,11 +154,11 @@ struct ProgramNode : public ASTNode {
 		}
 	}
 
-	void
-	GenerateCodeRecursive(llvm::raw_string_ostream& ss) {
-		this->GenerateCode();
-		GlobalModule->print(ss, nullptr);
-	}
+	// void
+	// GenerateCodeRecursive(llvm::raw_string_ostream& ss) {
+	// 	this->GenerateCode();
+	// 	GlobalModule->print(ss, nullptr);
+	// }
 
 	string
 	GetCompilerErrors() {
@@ -223,6 +223,34 @@ struct VdeclNode : public ASTNode {
 		ss << left2 << "node: vdecl" << '\n';
 		ss << left2 << "type: " << this->type_->GetName() << '\n';
 		ss << left2 << "var: " << this->identifier_ << '\n';
+	}
+
+	llvm::Value *
+	GenerateCode() {
+
+		llvm::Function * ParentFunction = GlobalBuilder.GetInsertBlock()->getParent();
+		const string &VarName = this->identifier_;
+		llvm::AllocaInst * Alloca = nullptr;
+		switch (this->type_->varType_) {
+		case IntVarType:
+			Alloca = CreateEntryBlockAlloca_int(ParentFunction, VarName);
+		case FloatVarType:
+			Alloca = CreateEntryBlockAlloca_float(ParentFunction, VarName);
+		case BooleanVarType:
+			Alloca = CreateEntryBlockAlloca_bool(ParentFunction, VarName);
+		case RefVarType:
+			RefType * refType = (RefType *) this->type_;
+			switch (refType->referredType_->varType_) {
+			case IntVarType:
+				Alloca = CreateEntryBlockAlloca_intPtr(ParentFunction, VarName);
+			case FloatVarType:
+				Alloca = CreateEntryBlockAlloca_floatPtr(ParentFunction, VarName);
+			case BooleanVarType:
+				Alloca = CreateEntryBlockAlloca_boolPtr(ParentFunction, VarName);
+			}
+		}
+		get<1>(ASTNode::varTable_[this->identifier_]) = Alloca;
+		return Alloca;
 	}
 
 	void
@@ -513,17 +541,17 @@ struct BinaryOperationNode: public ASTNode {
 	}
 
 	llvm::Value *
-	GenerateCode() {
+	GenerateCode(llvm::BasicBlock * endBlock) {
 		llvm::Value * ret = nullptr;
 		llvm::Value * L = nullptr;
 		llvm::Value * R = nullptr;
 		string error = "invalid binary operation";
 
 		if (this->operationType_!=Cast) {
-			L = this->children_[0]->GenerateCode();
-			R = this->children_[1]->GenerateCode();
+			L = this->children_[0]->GenerateCode(endBlock);
+			R = this->children_[1]->GenerateCode(endBlock);
 		} else {
-			R = this->children_[0]->GenerateCode();
+			R = this->children_[0]->GenerateCode(endBlock);
 		}
 
 		switch (this->operationType_) {
@@ -955,15 +983,15 @@ struct ExpressionNode: public ASTNode {
 	}
 
 	llvm::Value *
-	GenerateCode() {
+	GenerateCode(llvm::BasicBlock * endBlock) {
 		llvm::Value * ret = nullptr;
 		switch (this->constructorCase_) {
 		case 0:
-			return this->children_[0]->GenerateCode();
+			return this->children_[0]->GenerateCode(endBlock);
 		case 1:
-			return this->children_[0]->GenerateCode();
+			return this->children_[0]->GenerateCode(endBlock);
 		case 2:
-			return this->children_[0]->GenerateCode();
+			return this->children_[0]->GenerateCode(endBlock);
 		case 3:
 		{
 			unique_ptr<LiteralValue>& lv = literal_->GetValue();
@@ -1031,7 +1059,7 @@ struct ExpressionsNode: public ASTNode {
 
 struct StatementNode: public ASTNode {
 	ControlFlow * controlFlow_ = nullptr;
-	Function * function_ = nullptr;
+	llvm::Function *function_ = nullptr;
 	VdeclNode * varDecl_ = nullptr;
 	string stmtName_;
 	string printStringLiteral_;
@@ -1206,12 +1234,17 @@ struct StatementNode: public ASTNode {
 	}
 
 	llvm::Value *
-	GenerateCode() {
-		llvm::Value * ret = nullptr;
+	GenerateCode(llvm::BasicBlock * endBlock) {
+		llvm::Function * ParentFunction = GlobalBuilder.GetInsertBlock()->getParent();
+		llvm::BasicBlock * ret = llvm::BasicBlock::Create(GlobalContext, "stmt", ParentFunction, endBlock);
+		GlobalBuilder.SetInsertPoint(ret);
 		switch (this->constructorCase_) {
 		case 3:
-			ret = this->exprNode_->GenerateCode();
-			get<1>(ASTNode::varTable_[this->varDecl_->identifier_]) = ret;
+		{
+			llvm::Value * rhs = this->exprNode_->GenerateCode(endBlock);
+			llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[this->varDecl_->identifier_]);
+			GlobalBuilder.CreateStore(rhs, alloca);
+		}
 			break;
 		default:
 			break;
@@ -1222,7 +1255,7 @@ struct StatementNode: public ASTNode {
 	llvm::Value *
 	GetLLVMReturnValueRecursive() {
 		if (this->constructorCase_==2) { // a return expression statemnet
-			return this->exprNode_->GenerateCode();
+			return this->exprNode_->GenerateCode(endBlock);
 		} else {
 			return ASTNode::GetLLVMReturnValueRecursive();
 		}
@@ -1245,6 +1278,18 @@ struct StatementsNode: public ASTNode {
 			this->children_.push_back(node);
 		}
 		this->children_.push_back(statementNode);
+	}
+
+	llvm::Value *
+	GenerateCode(llvm::BasicBlock * endBlock) {
+
+		llvm::Function *parentfunction = GlobalBuilder.GetInsertBlock()->getParent();
+		llvm::BasicBlock * ret = llvm::BasicBlock::Create(GlobalContext, "stmts", parentfunction, endBlock);
+		GlobalBuilder.SetInsertPoint(ret);
+		for (auto n: this->children_) {
+			n->GenerateCode(endBlock);
+		}
+		return ret;
 	}
 
 	void
@@ -1281,6 +1326,16 @@ struct BlockNode: public ASTNode {
 
 	}
 
+	llvm::Value *
+	GenerateCode(llvm::BasicBlock * endBlock) {
+		llvm::Function *parentfunction = GlobalBuilder.GetInsertBlock()->getParent();
+		llvm::BasicBlock * ret = llvm::BasicBlock::Create(GlobalContext, "blk", parentfunction, endBlock);
+		GlobalBuilder.SetInsertPoint(ret);
+		this->children_[0]->GenerateCode(endBlock);
+		return ret;
+
+	}
+
 	void
 	PrintRecursive(stringstream& ss, unsigned depth) {
 		string left1 = std::string((depth-1)*2, ' ');
@@ -1292,6 +1347,8 @@ struct BlockNode: public ASTNode {
 			this->children_[0]->PrintRecursive(ss, depth+1);
 		}
 	}
+
+
 };
 
 
