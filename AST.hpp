@@ -94,8 +94,14 @@ struct ASTNode {
 
 	virtual llvm::Value *
 	GenerateCode(llvm::BasicBlock * endBlock) {
-		for (auto n: this->children_) {
-			n->GenerateCode(endBlock);
+		cout << "here!1" << endl;
+		this->children_;
+		cout << "here!2" << endl;
+		if (this->children_.size() > 0) {
+			for (auto n: this->children_) {
+				cout << "here!3" << endl;
+				n->GenerateCode(endBlock);
+			}
 		}
 		return nullptr;
 	}
@@ -154,11 +160,11 @@ struct ProgramNode : public ASTNode {
 		}
 	}
 
-	// void
-	// GenerateCodeRecursive(llvm::raw_string_ostream& ss) {
-	// 	this->GenerateCode();
-	// 	GlobalModule->print(ss, nullptr);
-	// }
+	 void
+	 GenerateCodeRecursive(llvm::raw_string_ostream& ss) {
+	 	ASTNode::GenerateCode(nullptr);
+	 	GlobalModule->print(ss, nullptr);
+	 }
 
 	string
 	GetCompilerErrors() {
@@ -226,31 +232,36 @@ struct VdeclNode : public ASTNode {
 	}
 
 	llvm::Value *
-	GenerateCode() {
+	GenerateCode(llvm::BasicBlock * endBlock) {
 
-		llvm::Function * ParentFunction = GlobalBuilder.GetInsertBlock()->getParent();
-		const string &VarName = this->identifier_;
-		llvm::AllocaInst * Alloca = nullptr;
+		llvm::Function * parentFunction = GlobalBuilder.GetInsertBlock()->getParent();
+		llvm::AllocaInst * allocaInst = nullptr;
 		switch (this->type_->varType_) {
 		case IntVarType:
-			Alloca = CreateEntryBlockAlloca_int(ParentFunction, VarName);
+			allocaInst = CreateEntryBlockAlloca_int(
+					parentFunction, this->identifier_);
 		case FloatVarType:
-			Alloca = CreateEntryBlockAlloca_float(ParentFunction, VarName);
+			allocaInst = CreateEntryBlockAlloca_float(
+					parentFunction, this->identifier_);
 		case BooleanVarType:
-			Alloca = CreateEntryBlockAlloca_bool(ParentFunction, VarName);
+			allocaInst = CreateEntryBlockAlloca_bool(
+					parentFunction, this->identifier_);
 		case RefVarType:
 			RefType * refType = (RefType *) this->type_;
 			switch (refType->referredType_->varType_) {
 			case IntVarType:
-				Alloca = CreateEntryBlockAlloca_intPtr(ParentFunction, VarName);
+				allocaInst = CreateEntryBlockAlloca_intPtr(
+						parentFunction, this->identifier_);
 			case FloatVarType:
-				Alloca = CreateEntryBlockAlloca_floatPtr(ParentFunction, VarName);
+				allocaInst = CreateEntryBlockAlloca_floatPtr(
+						parentFunction, this->identifier_);
 			case BooleanVarType:
-				Alloca = CreateEntryBlockAlloca_boolPtr(ParentFunction, VarName);
+				allocaInst = CreateEntryBlockAlloca_boolPtr(
+						parentFunction, this->identifier_);
 			}
 		}
-		get<1>(ASTNode::varTable_[this->identifier_]) = Alloca;
-		return Alloca;
+		get<1>(ASTNode::varTable_[this->identifier_]) = allocaInst;
+		return allocaInst;
 	}
 
 	void
@@ -808,7 +819,7 @@ struct ExistingVarNode: public ASTNode {
 	}
 
 	llvm::Value *
-	GenerateCode() {
+	GenerateCode(llvm::BasicBlock * endBlock) {
 		llvm::Value * val = GetLLVMValue(this->identifier_);
 		return GlobalBuilder.CreateLoad(val, this->identifier_);
 	}
@@ -1059,7 +1070,7 @@ struct ExpressionsNode: public ASTNode {
 
 struct StatementNode: public ASTNode {
 	ControlFlow * controlFlow_ = nullptr;
-	llvm::Function *function_ = nullptr;
+	Function * function_ = nullptr;
 	VdeclNode * varDecl_ = nullptr;
 	string stmtName_;
 	string printStringLiteral_;
@@ -1235,13 +1246,24 @@ struct StatementNode: public ASTNode {
 
 	llvm::Value *
 	GenerateCode(llvm::BasicBlock * endBlock) {
-		llvm::Function * ParentFunction = GlobalBuilder.GetInsertBlock()->getParent();
-		llvm::BasicBlock * ret = llvm::BasicBlock::Create(GlobalContext, "stmt", ParentFunction, endBlock);
+		llvm::Function * parentFunction = GlobalBuilder.GetInsertBlock()->getParent();
+		llvm::BasicBlock * ret = llvm::BasicBlock::Create(GlobalContext, "stmt", parentFunction, endBlock);
 		GlobalBuilder.SetInsertPoint(ret);
+
 		switch (this->constructorCase_) {
+		case 1:
+			GlobalBuilder.CreateRetVoid();
+			break;
+		case 2:
+		{
+			llvm::Value * rhs = this->exprNode_->GenerateCode(ret);
+			GlobalBuilder.CreateRet(rhs);
+			break;
+		}
 		case 3:
 		{
 			llvm::Value * rhs = this->exprNode_->GenerateCode(endBlock);
+			this->varDecl_->GenerateCode(endBlock);
 			llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[this->varDecl_->identifier_]);
 			GlobalBuilder.CreateStore(rhs, alloca);
 		}
@@ -1249,25 +1271,23 @@ struct StatementNode: public ASTNode {
 		default:
 			break;
 		}
+
 		return ret;
 	}
 
-	llvm::Value *
-	GetLLVMReturnValueRecursive() {
-		if (this->constructorCase_==2) { // a return expression statemnet
-			return this->exprNode_->GenerateCode(endBlock);
-		} else {
-			return ASTNode::GetLLVMReturnValueRecursive();
-		}
-	}
+//	llvm::Value *
+//	GetLLVMReturnValueRecursive() {
+//		if (this->constructorCase_==2) { // a return expression statemnet
+//			return this->exprNode_->GenerateCode(nullptr);
+//		} else {
+//			return ASTNode::GetLLVMReturnValueRecursive();
+//		}
+//	}
 };
 
 struct StatementsNode: public ASTNode {
 	StatementsNode(unsigned lineNumber,
 			StatementNode * statementNode) : ASTNode(lineNumber) {
-		// first statement in a block, push a map
-//		VarTable varTable;
-//		ASTNode::scopeStack_.push_back(varTable);
 		this->children_.push_back(statementNode);
 	}
 
@@ -1282,12 +1302,13 @@ struct StatementsNode: public ASTNode {
 
 	llvm::Value *
 	GenerateCode(llvm::BasicBlock * endBlock) {
-
-		llvm::Function *parentfunction = GlobalBuilder.GetInsertBlock()->getParent();
+		llvm::Function * parentfunction = GlobalBuilder.GetInsertBlock()->getParent();
 		llvm::BasicBlock * ret = llvm::BasicBlock::Create(GlobalContext, "stmts", parentfunction, endBlock);
 		GlobalBuilder.SetInsertPoint(ret);
 		for (auto n: this->children_) {
-			n->GenerateCode(endBlock);
+			llvm::Value * blockUnder = n->GenerateCode(endBlock);
+			GlobalBuilder.SetInsertPoint(ret);
+			GlobalBuilder.CreateBr((llvm::BasicBlock *)blockUnder);
 		}
 		return ret;
 	}
@@ -1331,7 +1352,9 @@ struct BlockNode: public ASTNode {
 		llvm::Function *parentfunction = GlobalBuilder.GetInsertBlock()->getParent();
 		llvm::BasicBlock * ret = llvm::BasicBlock::Create(GlobalContext, "blk", parentfunction, endBlock);
 		GlobalBuilder.SetInsertPoint(ret);
-		this->children_[0]->GenerateCode(endBlock);
+		llvm::Value * blockUnder = this->children_[0]->GenerateCode(endBlock);
+		GlobalBuilder.SetInsertPoint(ret);
+		GlobalBuilder.CreateBr((llvm::BasicBlock *)blockUnder);
 		return ret;
 
 	}
@@ -1353,7 +1376,6 @@ struct BlockNode: public ASTNode {
 
 
 struct FuncNode : public ASTNode {
-
 	ValidType * retType_ = nullptr;
 	string identifier_;
 	BlockNode * blockNode_ = nullptr;
@@ -1362,7 +1384,7 @@ struct FuncNode : public ASTNode {
 	int constructorCase_ = -1;
 
 	llvm::Function *
-	GenerateCode() {
+	GenerateCode(llvm::BasicBlock * endBlock) {
 		llvm::Type * llvmRetType = this->retType_->GetLLVMType();
 		llvm::FunctionType * functionType = nullptr;
 		if (this->constructorCase_==0) {
@@ -1390,14 +1412,20 @@ struct FuncNode : public ASTNode {
 		}
 
 		// create a new basic block to start insertion into
-		llvm::BasicBlock * BB = llvm::BasicBlock::Create(GlobalContext, "entry", ret);
-		GlobalBuilder.SetInsertPoint(BB);
-		llvm::Value * retVal = this->blockNode_->GetLLVMReturnValueRecursive();
-		if (retVal != nullptr) {
-			GlobalBuilder.CreateRet(retVal);
-		} else {
-			GlobalBuilder.CreateRetVoid();
-		}
+		llvm::BasicBlock * entryBlock = llvm::BasicBlock::Create(GlobalContext, "entry", ret);
+		GlobalBuilder.SetInsertPoint(entryBlock);
+//		llvm::Value * retVal = this->blockNode_->GetLLVMReturnValueRecursive();
+//
+//		if (retVal != nullptr) {
+//			GlobalBuilder.CreateRet(retVal);
+//		} else {
+//			GlobalBuilder.CreateRetVoid();
+//		}
+
+		llvm::BasicBlock * blockUnder = (llvm::BasicBlock *)
+				this->blockNode_->GenerateCode(nullptr);
+		GlobalBuilder.SetInsertPoint(entryBlock);
+		GlobalBuilder.CreateBr(blockUnder);
 		llvm::verifyFunction(*ret);
 		return ret;
 	}

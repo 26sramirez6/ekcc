@@ -329,11 +329,12 @@ main(int argc, char ** argv) {
 		cout << "Usage: [-h|-?] [-v] [-O] " <<
 				"[-emit-ast|-emit-llvm] -o " <<
 				"<output-file> <input-file>" << endl;
-		return -1;
+		return 1;
 	} else if (cfg.help_) {
 		cout << "Usage: [-h|-?] [-v] [-O] " <<
 				"[-emit-ast|-emit-llvm] -o " <<
 				"<output-file> <input-file>" << endl;
+		return 0;
 	}
 	// open a file handle to a particular file:
 	FILE * unit = fopen(cfg.inputFile_, "r");
