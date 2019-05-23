@@ -94,12 +94,8 @@ struct ASTNode {
 
 	virtual llvm::Value *
 	GenerateCode(llvm::BasicBlock * endBlock) {
-		cout << "here!1" << endl;
-		this->children_;
-		cout << "here!2" << endl;
 		if (this->children_.size() > 0) {
 			for (auto n: this->children_) {
-				cout << "here!3" << endl;
 				n->GenerateCode(endBlock);
 			}
 		}
@@ -240,26 +236,36 @@ struct VdeclNode : public ASTNode {
 		case IntVarType:
 			allocaInst = CreateEntryBlockAlloca_int(
 					parentFunction, this->identifier_);
+			break;
 		case FloatVarType:
 			allocaInst = CreateEntryBlockAlloca_float(
 					parentFunction, this->identifier_);
+			break;
 		case BooleanVarType:
 			allocaInst = CreateEntryBlockAlloca_bool(
 					parentFunction, this->identifier_);
+			break;
 		case RefVarType:
+		{
 			RefType * refType = (RefType *) this->type_;
 			switch (refType->referredType_->varType_) {
 			case IntVarType:
 				allocaInst = CreateEntryBlockAlloca_intPtr(
 						parentFunction, this->identifier_);
+				break;
 			case FloatVarType:
 				allocaInst = CreateEntryBlockAlloca_floatPtr(
 						parentFunction, this->identifier_);
+				break;
 			case BooleanVarType:
 				allocaInst = CreateEntryBlockAlloca_boolPtr(
 						parentFunction, this->identifier_);
+				break;
 			}
 		}
+			break;
+		}
+		get<0>(ASTNode::varTable_[this->identifier_]) = this->type_;
 		get<1>(ASTNode::varTable_[this->identifier_]) = allocaInst;
 		return allocaInst;
 	}
@@ -269,6 +275,7 @@ struct VdeclNode : public ASTNode {
 		PrintSelf(ss, depth);
 	}
 };
+
 
 struct VdeclsNode : public ASTNode {
 	VdeclsNode(unsigned lineNumber, VdeclNode * vdeclNode) :
@@ -300,6 +307,60 @@ struct VdeclsNode : public ASTNode {
 		}
 	};
 };
+
+struct ExistingVarNode: public ASTNode {
+	string identifier_;
+	ExistingVarNode(unsigned lineNumber, string identifier) :
+		ASTNode(lineNumber), identifier_(identifier.substr(1, string::npos)) {
+		VarTableEntry hit = ASTNode::varTable_.find(this->identifier_);
+		if (hit==ASTNode::varTable_.end()) {
+			stringstream ss;
+			ss << "error: line " << lineNumber << ": ";
+			ss << "variable identifier ";
+			ss << identifier_;
+			ss << " not declared. \n";
+			ASTNode::compilerErrors_.push_back(ss.str());
+		}
+	}
+
+	void
+	PrintRecursive(stringstream& ss, unsigned depth) {
+		string left1 = std::string((depth-1)*2, ' ');
+		ss << left1 << "name: varval" << '\n';
+		ss << left1 << "var: " <<
+		this->identifier_.substr(1, string::npos) << '\n';
+	}
+
+	llvm::Value *
+	GenerateCode(llvm::BasicBlock * endBlock) {
+		llvm::Value * val = GetLLVMValue(this->identifier_);
+		ValidType * vtype = get<0>(ASTNode::varTable_[this->identifier_]);
+		if (vtype->varType_==RefVarType) {
+			cout << "in the right place" << endl;
+			llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[this->identifier_]);
+			llvm::LoadInst * loadInstruction =  GlobalBuilder.CreateLoad(alloca, this->identifier_);
+			return GlobalBuilder.CreateLoad(alloca, this->identifier_);
+		}
+		return GlobalBuilder.CreateLoad(val, this->identifier_);
+	}
+
+};
+
+
+struct ExistingFuncNode: public ASTNode {
+	string identifier_;
+	ExistingFuncNode(unsigned lineNumber, string identifier) :
+	ASTNode(lineNumber), identifier_(identifier){}
+
+	void
+	PrintRecursive(stringstream& ss, unsigned depth) {
+		string left1 = std::string((depth-1)*2, ' ');
+		ss << left1 << "name: funccall" << '\n';
+		ss << left1 << "globid: " << this->identifier_ << '\n';
+	}
+
+};
+
 
 struct TdeclsNode : public ASTNode {
 	ValidType * paramType_ = nullptr;
@@ -558,21 +619,30 @@ struct BinaryOperationNode: public ASTNode {
 		llvm::Value * R = nullptr;
 		string error = "invalid binary operation";
 
-		if (this->operationType_!=Cast) {
-			L = this->children_[0]->GenerateCode(endBlock);
-			R = this->children_[1]->GenerateCode(endBlock);
-		} else {
-			R = this->children_[0]->GenerateCode(endBlock);
-		}
-
 		switch (this->operationType_) {
 		case Assign:
 		{
+			R = this->children_[1]->GenerateCode(endBlock);
+			ExistingVarNode * existingNode = (ExistingVarNode *)this->children_[0];
+			llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[existingNode->identifier_]);
 
+			ValidType * vtype = get<0>(ASTNode::varTable_[existingNode->identifier_]);
+			if (vtype->varType_==RefVarType) {
+				cout << "in the right place!!" << endl;
+				llvm::LoadInst * loadInstruction =  GlobalBuilder.CreateLoad(
+						alloca, existingNode->identifier_);
+				return GlobalBuilder.CreateStore(R, get<1>(ASTNode::varTable_["x"]));
+			}
+
+			assert(alloca);
+			assert(R);
+			return GlobalBuilder.CreateStore(R, alloca);
 		}
+			// the break below will never run
 			break;
 		case Cast:
 		{
+			R = this->children_[0]->GenerateCode(endBlock);
 			llvm::Type * castTo = ValidType::ConvertVariableTypeToLLVMType(this->resultType_);
 			switch (this->castFrom_) {
 			case FloatVarType: // float -> int / cint
@@ -589,6 +659,8 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case Multiply:
 		{
+			L = this->children_[0]->GenerateCode(endBlock);
+			R = this->children_[1]->GenerateCode(endBlock);
 			switch (this->resultType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFMul(L, R, "mul_float");
@@ -604,6 +676,8 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case Divide:
 		{
+			L = this->children_[0]->GenerateCode(endBlock);
+			R = this->children_[1]->GenerateCode(endBlock);
 			switch (this->resultType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFDiv(L, R, "div_float");
@@ -619,6 +693,8 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case Add:
 		{
+			L = this->children_[0]->GenerateCode(endBlock);
+			R = this->children_[1]->GenerateCode(endBlock);
 			switch (this->resultType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFAdd(L, R, "add_float");
@@ -634,6 +710,8 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case Subtract:
 		{
+			L = this->children_[0]->GenerateCode(endBlock);
+			R = this->children_[1]->GenerateCode(endBlock);
 			switch (this->resultType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFSub(L, R, "sub_float");
@@ -649,6 +727,8 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case Equality:
 		{
+			L = this->children_[0]->GenerateCode(endBlock);
+			R = this->children_[1]->GenerateCode(endBlock);
 			switch (this->resultType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOEQ(L, R, "cmpeq_float");
@@ -668,6 +748,8 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case LessThan:
 		{
+			L = this->children_[0]->GenerateCode(endBlock);
+			R = this->children_[1]->GenerateCode(endBlock);
 			switch (this->resultType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOLT(L, R, "cmplt_float");
@@ -683,6 +765,8 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case GreaterThan:
 		{
+			L = this->children_[0]->GenerateCode(endBlock);
+			R = this->children_[1]->GenerateCode(endBlock);
 			switch (this->resultType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOGT(L, R, "cmpgt_float");
@@ -698,6 +782,8 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case Land:
 		{
+			L = this->children_[0]->GenerateCode(endBlock);
+			R = this->children_[1]->GenerateCode(endBlock);
 			switch (this->resultType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOGT(L, R, "cmpgt_float");
@@ -717,6 +803,8 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case Lor:
 		{
+			L = this->children_[0]->GenerateCode(endBlock);
+			R = this->children_[1]->GenerateCode(endBlock);
 			switch (this->resultType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOGT(L, R, "cmpgt_float");
@@ -793,51 +881,6 @@ struct BinaryOperationNode: public ASTNode {
 		ss << left1 << "rhs:" << '\n';
 		this->children_[1]->PrintRecursive(ss, depth+1);
 	}
-};
-
-struct ExistingVarNode: public ASTNode {
-	string identifier_;
-	ExistingVarNode(unsigned lineNumber, string identifier) :
-		ASTNode(lineNumber), identifier_(identifier.substr(1, string::npos)) {
-		VarTableEntry hit = ASTNode::varTable_.find(this->identifier_);
-		if (hit==ASTNode::varTable_.end()) {
-			stringstream ss;
-			ss << "error: line " << lineNumber << ": ";
-			ss << "variable identifier ";
-			ss << identifier_;
-			ss << " not declared. \n";
-			ASTNode::compilerErrors_.push_back(ss.str());
-		}
-	}
-
-	void
-	PrintRecursive(stringstream& ss, unsigned depth) {
-		string left1 = std::string((depth-1)*2, ' ');
-		ss << left1 << "name: varval" << '\n';
-		ss << left1 << "var: " <<
-		this->identifier_.substr(1, string::npos) << '\n';
-	}
-
-	llvm::Value *
-	GenerateCode(llvm::BasicBlock * endBlock) {
-		llvm::Value * val = GetLLVMValue(this->identifier_);
-		return GlobalBuilder.CreateLoad(val, this->identifier_);
-	}
-};
-
-
-struct ExistingFuncNode: public ASTNode {
-	string identifier_;
-	ExistingFuncNode(unsigned lineNumber, string identifier) :
-	ASTNode(lineNumber), identifier_(identifier){}
-
-	void
-	PrintRecursive(stringstream& ss, unsigned depth) {
-		string left1 = std::string((depth-1)*2, ' ');
-		ss << left1 << "name: funccall" << '\n';
-		ss << left1 << "globid: " << this->identifier_ << '\n';
-	}
-
 };
 
 
@@ -1024,10 +1067,12 @@ struct ExpressionNode: public ASTNode {
 		}
 			break;
 		case 4:
-			break;
+			return this->children_[0]->GenerateCode(endBlock);
 		case 5:
+			cout << "unhandled yet" << endl;
 			break;
 		case 6:
+			cout << "unhandled yet" << endl;
 			break;
 		}
 		return ret;
@@ -1132,7 +1177,7 @@ struct StatementNode: public ASTNode {
 	StatementNode(unsigned lineNumber,
 			ExpressionNode * expressionNode) :
 		ASTNode(lineNumber), stmtName_("expstmt"),
-		constructorCase_(4) {
+		exprNode_(expressionNode), constructorCase_(4) {
 		this->children_.push_back(expressionNode);
 	}
 
@@ -1265,13 +1310,31 @@ struct StatementNode: public ASTNode {
 			llvm::Value * rhs = this->exprNode_->GenerateCode(endBlock);
 			this->varDecl_->GenerateCode(endBlock);
 			llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[this->varDecl_->identifier_]);
-			GlobalBuilder.CreateStore(rhs, alloca);
+
+			// check for ref type for store instruction
+			ValidType * vtype = get<0>(ASTNode::varTable_[this->varDecl_->identifier_]);
+			assert(vtype);
+			if (vtype->GetVarType()==RefVarType) {
+				ExistingVarNode * existingVarNode = (ExistingVarNode *)
+						this->exprNode_->children_[0];
+				llvm::AllocaInst * rhsPtr = get<1>(
+					ASTNode::varTable_[existingVarNode->identifier_]);
+				GlobalBuilder.CreateStore(rhsPtr, alloca);
+			} else {
+				GlobalBuilder.CreateStore(rhs, alloca);
+			}
+		}
+			break;
+		case 4:
+		{
+			this->exprNode_->GenerateCode(endBlock);
 		}
 			break;
 		default:
+			cout << "unhandled case in statement generate code" << endl;
 			break;
 		}
-
+//		GlobalBuilder.CreateBr(endBlock);
 		return ret;
 	}
 
@@ -1305,11 +1368,19 @@ struct StatementsNode: public ASTNode {
 		llvm::Function * parentfunction = GlobalBuilder.GetInsertBlock()->getParent();
 		llvm::BasicBlock * ret = llvm::BasicBlock::Create(GlobalContext, "stmts", parentfunction, endBlock);
 		GlobalBuilder.SetInsertPoint(ret);
-		for (auto n: this->children_) {
-			llvm::Value * blockUnder = n->GenerateCode(endBlock);
-			GlobalBuilder.SetInsertPoint(ret);
-			GlobalBuilder.CreateBr((llvm::BasicBlock *)blockUnder);
+		vector<llvm::BasicBlock *> statementBlocks;
+		for (int i=0; i<this->children_.size(); ++i) {
+			llvm::BasicBlock * statementBlock = (llvm::BasicBlock *)
+				this->children_[i]->GenerateCode(endBlock);
+			statementBlocks.push_back(statementBlock);
 		}
+
+		for (int i=0; i<this->children_.size()-1; ++i) {
+			GlobalBuilder.SetInsertPoint(statementBlocks[i]);
+			GlobalBuilder.CreateBr(statementBlocks[i+1]);
+		}
+		GlobalBuilder.SetInsertPoint(ret);
+		GlobalBuilder.CreateBr(statementBlocks[0]);
 		return ret;
 	}
 

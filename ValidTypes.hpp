@@ -82,6 +82,11 @@ struct ValidType {
 	virtual llvm::Type *
 	GetLLVMType() = 0;
 
+	virtual VariableTypes
+	GetVarType() {
+		return this->varType_;
+	}
+
 	static VariableTypes
 	ConvertLiteralToVariableType(LiteralTypes in) {
 		switch (in) {
@@ -121,6 +126,7 @@ struct IntType : public ValidType {
 	GetLLVMType() {
 		return llvm::Type::getInt32Ty(GlobalContext);
 	}
+
 };
 
 struct FloatType : public ValidType {

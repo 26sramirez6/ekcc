@@ -1,0 +1,6 @@
+def int run() {
+	int $x = 3;
+	ref int $y = $x;
+	$y = $y + 7;
+	return $x;
+}

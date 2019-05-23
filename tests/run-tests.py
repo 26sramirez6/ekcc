@@ -19,18 +19,25 @@ true_outputs = [
 1, #test 11
 1, #test 12
 (0,4), #test 13
-(0,9)  #test 14
+(0,9), #test 14
+(0,18),#test 15
+(0,3), #test 16
+(0,8), #test 17
+(0,32), #test 18
+(0,10), #test 19
 ]
 total_passed = 0
 failed = []
 for i in range(1,len(true_outputs)+1):
     print("---------TEST {0}----------".format(i))
     if i < 13:
-        pipe = Popen(["./ekcc", "./tests/test{0}.ek".format(i)], 
+        continue
+        pipe = Popen(["./ekcc", "-o", "./tests/out/test{0}.yaml".format(i),
+                      "./tests/test{0}.ek".format(i)], 
                       stdout=PIPE)
                       
         test_output = pipe.communicate()[0].decode("utf-8")
-        #print(test_output)
+        print(test_output)
     
         print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1]) )
     
@@ -46,7 +53,7 @@ for i in range(1,len(true_outputs)+1):
                       "./tests/test{0}.ek".format(i)], 
                       stdout=PIPE)
         test_output = pipe.communicate()[0].decode("utf-8")
-        
+        print(test_output)
         print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1][0]) )
     
         if (true_outputs[i-1][0]==0 and pipe.returncode!=0) or (true_outputs[i-1][0]!=0 and pipe.returncode==0):
@@ -61,6 +68,9 @@ for i in range(1,len(true_outputs)+1):
                 if pipe.returncode!=true_outputs[i-1][1]:
                     print("Test {0} failed".format(i))
                     failed.append(i)
+                else:
+                    total_passed += 1
+                    print("Test {0} pass".format(i))
             else:
                 print("Test {0} failed".format(i))
                 failed.append(i)
