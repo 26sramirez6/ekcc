@@ -408,6 +408,5 @@ main(int argc, char ** argv) {
 
 void yyerror(const char *s) {
   cout << "compile error" << s << endl;
-  // might as well halt now:
-  exit(-1);
+  exit(1);
 }

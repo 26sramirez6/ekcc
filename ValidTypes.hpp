@@ -3,6 +3,7 @@
 #include <string.h>
 #include <iostream>
 #include <memory>
+#include <assert.h>
 
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
@@ -62,7 +63,7 @@ enum VariableTypes {
 	FloatVarType,
 	BooleanVarType,
 	RefVarType,
-	VoidVarType
+	VoidVarType,
 };
 
 enum UnaryOperationTypes {
@@ -71,10 +72,14 @@ enum UnaryOperationTypes {
 	Minus
 };
 
+
 struct ValidType {
 	VariableTypes varType_;
+	ValidType * referredType_ = nullptr;
 	ValidType() : varType_(EmptyVarType) {}
 	ValidType(VariableTypes varType) : varType_(varType) {}
+	ValidType(VariableTypes varType, ValidType * referredType) :
+		varType_(varType), referredType_(referredType) {}
 	virtual ~ValidType() {}
 	virtual string
 	GetName() = 0;
@@ -113,6 +118,65 @@ struct ValidType {
 		}
 		return nullptr;
 	}
+
+	static bool
+	IsValidBinaryOp(ValidType * validTypeL, ValidType * validTypeR) {
+		if (validTypeL==nullptr || validTypeR==nullptr) {
+			return false;
+		}
+
+		VariableTypes l = validTypeL->varType_;
+		VariableTypes r = validTypeR->varType_;
+		if (l==RefVarType) {
+			l = validTypeL->referredType_->varType_;
+		}
+
+		if (r==RefVarType) {
+			r = validTypeR->referredType_->varType_;
+		}
+
+		if (l!=r) {
+			return false;
+		} else if (
+				l==VoidVarType ||
+				l==StringVarType ||
+				l==EmptyVarType ||
+				l==BooleanVarType) {
+			return false;
+		}
+		return true;
+	}
+
+	static bool
+	IsNumericType(ValidType * type) {
+		return (type!=nullptr &&
+				(type->varType_==FloatVarType ||
+				 type->varType_==IntVarType ||
+				 type->varType_==CintVarType));
+	}
+
+	static bool
+	IsValidCast(ValidType * castTo, ValidType * castFrom) {
+		if (castTo==nullptr || castFrom==nullptr) {
+			return false;
+		} else if (castTo->varType_==BooleanVarType && castTo->varType_==BooleanVarType) {
+			return true;
+		} else if (!IsNumericType(castTo) || !IsNumericType(castTo)) {
+			return false;
+		}
+		return true;
+	}
+
+	static ValidType *
+	GetUnderlyingType(ValidType * in) {
+		assert(in);
+		if (in==nullptr) return nullptr;
+		if (in->varType_==RefVarType) {
+			return in->referredType_;
+		}
+		return in;
+	}
+
 };
 
 struct IntType : public ValidType {
@@ -184,11 +248,10 @@ struct VoidType : public ValidType {
 struct RefType : public ValidType {
     bool noAlias_ = false;
 	bool invalidConstructor_ = false;
-    ValidType * referredType_ = nullptr;
 
     RefType() : ValidType(RefVarType) {}
     RefType(bool noAlias, ValidType * referredType) :
-    	ValidType(RefVarType), noAlias_(noAlias), referredType_(referredType) {
+    	ValidType(RefVarType, referredType), noAlias_(noAlias) {
 		// Check: a ref type may not contain a 'ref' or 'void' type.
 		this->invalidConstructor_ = referredType->varType_ == RefVarType ||
 			referredType->varType_ == VoidVarType;
@@ -297,6 +360,18 @@ struct Literal {
 			name_("blit"),
 			value_(new LiteralValue()) {
 		this->value_->bValue_ = value;
+	}
+
+	static ValidType *
+	ConvertToValidType(Literal * in) {
+		switch (in->type_) {
+		case EmptyLiteral: return nullptr;
+		case StringLiteral: return nullptr;
+		case IntLiteral: return new IntType();
+		case FloatLiteral: return new FloatType();
+		case BooleanLiteral: return new BoolType();
+		}
+		return nullptr;
 	}
 
 	string

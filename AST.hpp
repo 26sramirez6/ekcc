@@ -16,6 +16,7 @@
 #include<tuple>
 #include<memory>
 #include<assert.h>
+#include<stdlib.h>
 
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
@@ -32,6 +33,7 @@
 #include "LLVMGlobals.hpp"
 using std::vector;
 using std::string;
+using std::to_string;
 using std::move;
 using std::stringstream;
 using std::unordered_map;
@@ -54,12 +56,12 @@ struct ASTNode {
 	static bool runDefined_;
 	vector< ASTNode * > children_;
 	unsigned lineNumber_ = 0;
-	VariableTypes resultType_ = EmptyVarType;
+	ValidType * resultType_ = nullptr;
 
-	ASTNode() : lineNumber_(0), resultType_(EmptyVarType) {}
+	ASTNode() : lineNumber_(0), resultType_(nullptr) {}
 	ASTNode(unsigned lineNumber) : lineNumber_(lineNumber) {}
-	ASTNode(VariableTypes resultType) : resultType_(resultType) {}
-	ASTNode(unsigned lineNumber, VariableTypes resultType) :
+	ASTNode(ValidType * resultType) : resultType_(resultType) {}
+	ASTNode(unsigned lineNumber, ValidType * resultType) :
 		lineNumber_(lineNumber), resultType_(resultType) {}
 
 	virtual void
@@ -69,6 +71,11 @@ struct ASTNode {
 	~ASTNode() {
 		for (auto n : this->children_) {
 			delete n;
+			n = nullptr;
+		}
+		if (this->resultType_) {
+			delete this->resultType_;
+			this->resultType_ = nullptr;
 		}
 	}
 
@@ -122,6 +129,14 @@ struct ASTNode {
 			ASTNode::ready_ = true;
 			GlobalModule = new llvm::Module(inputFile, GlobalContext);
 		}
+	}
+
+	static void
+	LogError(unsigned lineNumber, string errorMessage) {
+		stringstream ss;
+		ss << "error: line " << lineNumber << ": ";
+		ss << errorMessage;
+		ASTNode::compilerErrors_.push_back(ss.str());
 	}
 };
 
@@ -184,11 +199,13 @@ struct VdeclNode : public ASTNode {
 	virtual ~VdeclNode() {
 		if (this->type_ != nullptr) {
 			delete this->type_;
+			this->type_ = nullptr;
 		}
 	}
 
 	VdeclNode(unsigned lineNumber, ValidType * type, string identifier) :
-		ASTNode(lineNumber), type_(type), identifier_(identifier.substr(1, string::npos)) {
+		ASTNode(lineNumber), type_(type),
+		identifier_(identifier.substr(1, string::npos)) {
 		if (ASTNode::varTable_.end() != ASTNode::varTable_.find(identifier_)) {
 			stringstream ss;
 			ss << "error: line " << lineNumber;
@@ -247,22 +264,29 @@ struct VdeclNode : public ASTNode {
 			break;
 		case RefVarType:
 		{
-			RefType * refType = (RefType *) this->type_;
-			switch (refType->referredType_->varType_) {
-			case IntVarType:
-				allocaInst = CreateEntryBlockAlloca_intPtr(
-						parentFunction, this->identifier_);
-				break;
-			case FloatVarType:
-				allocaInst = CreateEntryBlockAlloca_floatPtr(
-						parentFunction, this->identifier_);
-				break;
-			case BooleanVarType:
-				allocaInst = CreateEntryBlockAlloca_boolPtr(
-						parentFunction, this->identifier_);
-				break;
-			}
+//			RefType * refType = (RefType *) this->type_;
+//			switch (refType->referredType_->varType_) {
+//			case IntVarType:
+//				allocaInst = CreateEntryBlockAlloca_intPtr(
+//						parentFunction, this->identifier_);
+//				break;
+//			case FloatVarType:
+//				allocaInst = CreateEntryBlockAlloca_floatPtr(
+//						parentFunction, this->identifier_);
+//				break;
+//			case BooleanVarType:
+//				allocaInst = CreateEntryBlockAlloca_boolPtr(
+//						parentFunction, this->identifier_);
+//				break;
+//			default:
+//				cout << "unhandled case in vdeclnode" << endl;
+//				break;
+//			}
+			allocaInst = get<1>(ASTNode::varTable_["x"]);
 		}
+			break;
+		default:
+			cout << "unhandled case in vdeclnode" << endl;
 			break;
 		}
 		get<0>(ASTNode::varTable_[this->identifier_]) = this->type_;
@@ -313,6 +337,7 @@ struct ExistingVarNode: public ASTNode {
 	ExistingVarNode(unsigned lineNumber, string identifier) :
 		ASTNode(lineNumber), identifier_(identifier.substr(1, string::npos)) {
 		VarTableEntry hit = ASTNode::varTable_.find(this->identifier_);
+		this->resultType_ = get<0>(hit->second);
 		if (hit==ASTNode::varTable_.end()) {
 			stringstream ss;
 			ss << "error: line " << lineNumber << ": ";
@@ -335,8 +360,8 @@ struct ExistingVarNode: public ASTNode {
 	GenerateCode(llvm::BasicBlock * endBlock) {
 		llvm::Value * val = GetLLVMValue(this->identifier_);
 		ValidType * vtype = get<0>(ASTNode::varTable_[this->identifier_]);
+
 		if (vtype->varType_==RefVarType) {
-			cout << "in the right place" << endl;
 			llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[this->identifier_]);
 			llvm::LoadInst * loadInstruction =  GlobalBuilder.CreateLoad(alloca, this->identifier_);
 			return GlobalBuilder.CreateLoad(alloca, this->identifier_);
@@ -394,6 +419,7 @@ struct TdeclsNode : public ASTNode {
 	virtual ~TdeclsNode() {
 		if (this->paramType_ != nullptr) {
 			delete this->paramType_;
+			this->paramType_ = nullptr;
 		}
 	};
 
@@ -449,6 +475,7 @@ struct ExternNode : public ASTNode {
 	virtual ~ExternNode() {
 		if (this->retType_ != nullptr) {
 			delete this->retType_;
+			this->retType_ = nullptr;
 		}
 	}
 
@@ -506,13 +533,12 @@ struct ExternsNode : public ASTNode {
 
 struct UnaryOperationNode: public ASTNode {
 	UnaryOperationTypes operationType_;
-	VariableTypes resultType_ = EmptyVarType;
 	UnaryOperationNode(unsigned lineNumber,
 			UnaryOperationTypes operationType,
 			ASTNode * expressionNode1) :
 		ASTNode(lineNumber), operationType_(operationType) {
 		if (operationType==Not) {
-			this->resultType_ = BooleanVarType;
+			this->resultType_ = new BoolType();
 		} else {
 			this->resultType_ = expressionNode1->resultType_;
 		}
@@ -543,8 +569,8 @@ struct UnaryOperationNode: public ASTNode {
 
 struct BinaryOperationNode: public ASTNode {
 	BinaryOperationTypes operationType_;
-	ValidType * typeCast_ = nullptr;
-	VariableTypes castFrom_ = EmptyVarType;
+	ValidType * castTo_ = nullptr;
+	ValidType * castFrom_ = nullptr;
 
 	BinaryOperationNode(unsigned lineNumber,
 			BinaryOperationTypes operationType,
@@ -561,53 +587,77 @@ struct BinaryOperationNode: public ASTNode {
 			ValidType * validType,
 			ASTNode * expressionNode1) :
 		ASTNode(lineNumber) , operationType_(Cast),
-		typeCast_(validType) {
+		castTo_(validType) {
 		this->children_.push_back(expressionNode1);
 		this->castFrom_ = expressionNode1->resultType_;
 		SetResultType();
 	}
 
 	virtual ~BinaryOperationNode() {
-		if (this->typeCast_ != nullptr) {
-			delete this->typeCast_;
+		if (this->castTo_ != nullptr) {
+			delete this->castTo_;
+			this->castTo_ = nullptr;
 		}
 	}
 
 	void
 	SetResultType() {
+		string error = "error: line " +
+				to_string(this->lineNumber_) +
+				" invalid binary operation";
+		if (this->operationType_ == Cast) {
+			if (!ValidType::IsValidCast(
+					this->castTo_, this->castFrom_)) {
+				ASTNode::compilerErrors_.push_back(error);
+			}
+		} else {
+
+			if (!ValidType::IsValidBinaryOp(
+					this->children_[0]->resultType_,
+					this->children_[1]->resultType_)) {
+				ASTNode::compilerErrors_.push_back(error);
+			}
+		}
+
 		switch (this->operationType_) {
 		case Assign:
-			this->resultType_ = this->children_[0]->resultType_;
+			this->resultType_ = ValidType::GetUnderlyingType(
+					this->children_[0]->resultType_);
 			break;
 		case Cast:
-			this->resultType_ = typeCast_->varType_;
+			// castTo_ should be valid by this point
+			this->resultType_ = this->castTo_;
 			break;
 		case Multiply:
-			this->resultType_ = this->children_[0]->resultType_;
+			this->resultType_ = ValidType::GetUnderlyingType(
+					this->children_[0]->resultType_);
 			break;
 		case Divide:
-			this->resultType_ = this->children_[0]->resultType_;
+			this->resultType_ = ValidType::GetUnderlyingType(
+					this->children_[0]->resultType_);
 			break;
 		case Add:
-			this->resultType_ = this->children_[0]->resultType_;
+			this->resultType_ = ValidType::GetUnderlyingType(
+					this->children_[0]->resultType_);
 			break;
 		case Subtract:
-			this->resultType_ = this->children_[0]->resultType_;
+			this->resultType_ = ValidType::GetUnderlyingType(
+					this->children_[0]->resultType_);
 			break;
 		case Equality:
-			this->resultType_ = BooleanVarType;
+			this->resultType_ = new BoolType();
 			break;
 		case LessThan:
-			this->resultType_ = BooleanVarType;
+			this->resultType_ = new BoolType();
 			break;
 		case GreaterThan:
-			this->resultType_ = BooleanVarType;
+			this->resultType_ = new BoolType();
 			break;
 		case Land:
-			this->resultType_ = BooleanVarType;
+			this->resultType_ = new BoolType();
 			break;
 		case Lor:
-			this->resultType_ = BooleanVarType;
+			this->resultType_ = new BoolType();
 			break;
 		}
 	}
@@ -617,7 +667,7 @@ struct BinaryOperationNode: public ASTNode {
 		llvm::Value * ret = nullptr;
 		llvm::Value * L = nullptr;
 		llvm::Value * R = nullptr;
-		string error = "invalid binary operation";
+		string error = "invalid binary operation in GenerateCode";
 
 		switch (this->operationType_) {
 		case Assign:
@@ -625,17 +675,6 @@ struct BinaryOperationNode: public ASTNode {
 			R = this->children_[1]->GenerateCode(endBlock);
 			ExistingVarNode * existingNode = (ExistingVarNode *)this->children_[0];
 			llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[existingNode->identifier_]);
-
-			ValidType * vtype = get<0>(ASTNode::varTable_[existingNode->identifier_]);
-			if (vtype->varType_==RefVarType) {
-				cout << "in the right place!!" << endl;
-				llvm::LoadInst * loadInstruction =  GlobalBuilder.CreateLoad(
-						alloca, existingNode->identifier_);
-				return GlobalBuilder.CreateStore(R, get<1>(ASTNode::varTable_["x"]));
-			}
-
-			assert(alloca);
-			assert(R);
 			return GlobalBuilder.CreateStore(R, alloca);
 		}
 			// the break below will never run
@@ -643,8 +682,9 @@ struct BinaryOperationNode: public ASTNode {
 		case Cast:
 		{
 			R = this->children_[0]->GenerateCode(endBlock);
-			llvm::Type * castTo = ValidType::ConvertVariableTypeToLLVMType(this->resultType_);
-			switch (this->castFrom_) {
+			llvm::Type * castTo = ValidType::ConvertVariableTypeToLLVMType(
+					this->resultType_->varType_);
+			switch (this->castFrom_->varType_) {
 			case FloatVarType: // float -> int / cint
 				return GlobalBuilder.CreateFPCast(R, castTo, "cast_float");
 			case IntVarType: // int -> float / cint
@@ -652,7 +692,8 @@ struct BinaryOperationNode: public ASTNode {
 			case CintVarType: // cint -> float / int
 				return GlobalBuilder.CreateIntCast(R, castTo, true, "cast_cint");
 			default:
-				ASTNode::compilerErrors_.push_back(error);
+				cout << error << endl;
+				exit(1);
 				break;
 			}
 		}
@@ -661,7 +702,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->resultType_) {
+			switch (this->resultType_->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFMul(L, R, "mul_float");
 			case IntVarType:
@@ -669,7 +710,8 @@ struct BinaryOperationNode: public ASTNode {
 			case CintVarType:
 				return GlobalBuilder.CreateNSWMul(L, R, "mul_cint");
 			default:
-				ASTNode::compilerErrors_.push_back(error);
+				cout << error << endl;
+				exit(1);
 				break;
 			}
 		}
@@ -678,7 +720,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->resultType_) {
+			switch (this->resultType_->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFDiv(L, R, "div_float");
 			case IntVarType:
@@ -686,7 +728,8 @@ struct BinaryOperationNode: public ASTNode {
 			case CintVarType:
 				return GlobalBuilder.CreateSDiv(L, R, "div_cint");
 			default:
-				ASTNode::compilerErrors_.push_back(error);
+				cout << error << endl;
+				exit(1);
 				break;
 			}
 		}
@@ -695,7 +738,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->resultType_) {
+			switch (this->resultType_->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFAdd(L, R, "add_float");
 			case IntVarType:
@@ -703,7 +746,8 @@ struct BinaryOperationNode: public ASTNode {
 			case CintVarType:
 				return GlobalBuilder.CreateNSWAdd(L, R, "add_cint");
 			default:
-				ASTNode::compilerErrors_.push_back(error);
+				cout << error << endl;
+				exit(1);
 				break;
 			}
 		}
@@ -712,7 +756,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->resultType_) {
+			switch (this->resultType_->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFSub(L, R, "sub_float");
 			case IntVarType:
@@ -720,7 +764,8 @@ struct BinaryOperationNode: public ASTNode {
 			case CintVarType:
 				return GlobalBuilder.CreateNSWSub(L, R, "sub_cint");
 			default:
-				ASTNode::compilerErrors_.push_back(error);
+				cout << error << endl;
+				exit(1);
 				break;
 			}
 		}
@@ -729,7 +774,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->resultType_) {
+			switch (this->children_[0]->resultType_->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOEQ(L, R, "cmpeq_float");
 			case IntVarType:
@@ -741,7 +786,8 @@ struct BinaryOperationNode: public ASTNode {
 			case RefVarType:
 				return GlobalBuilder.CreateICmpEQ(L, R, "cmpeq_ref");
 			default:
-				ASTNode::compilerErrors_.push_back(error);
+				cout << error << endl;
+				exit(1);
 				break;
 			}
 		}
@@ -750,7 +796,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->resultType_) {
+			switch (this->children_[0]->resultType_->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOLT(L, R, "cmplt_float");
 			case IntVarType:
@@ -758,7 +804,8 @@ struct BinaryOperationNode: public ASTNode {
 			case CintVarType:
 				return GlobalBuilder.CreateICmpSLT(L, R, "cmplt_cint");
 			default:
-				ASTNode::compilerErrors_.push_back(error);
+				cout << error << endl;
+				exit(1);
 				break;
 			}
 		}
@@ -767,7 +814,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->resultType_) {
+			switch (this->children_[0]->resultType_->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOGT(L, R, "cmpgt_float");
 			case IntVarType:
@@ -775,7 +822,8 @@ struct BinaryOperationNode: public ASTNode {
 			case CintVarType:
 				return GlobalBuilder.CreateICmpSGT(L, R, "cmpgt_cint");
 			default:
-				ASTNode::compilerErrors_.push_back(error);
+				cout << error << endl;
+				exit(1);
 				break;
 			}
 		}
@@ -784,7 +832,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->resultType_) {
+			switch (this->children_[0]->resultType_->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOGT(L, R, "cmpgt_float");
 			case IntVarType:
@@ -796,7 +844,8 @@ struct BinaryOperationNode: public ASTNode {
 			case RefVarType:
 				return GlobalBuilder.CreateICmpSGT(L, R, "cmpgt_ref");
 			default:
-				ASTNode::compilerErrors_.push_back(error);
+				cout << error << endl;
+				exit(1);
 				break;
 			}
 		}
@@ -805,7 +854,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->resultType_) {
+			switch (this->children_[0]->resultType_->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOGT(L, R, "cmpgt_float");
 			case IntVarType:
@@ -817,13 +866,15 @@ struct BinaryOperationNode: public ASTNode {
 			case RefVarType:
 				return GlobalBuilder.CreateICmpSGT(L, R, "cmpgt_ref");
 			default:
-				ASTNode::compilerErrors_.push_back(error);
+				cout << error << endl;
+				exit(1);
 				break;
 			}
 		}
 			break;
 		default:
-			ASTNode::compilerErrors_.push_back(error);
+			cout << error << endl;
+			exit(1);
 			break;
 		}
 		return ret;
@@ -834,13 +885,14 @@ struct BinaryOperationNode: public ASTNode {
 		string left1 = std::string((depth-1)*2, ' ');
 		ss << left1 << "name: binop" << '\n';
 		ss << left1 << "op: ";
+
 		switch (this->operationType_) {
 		case Assign:
 			ss << "assign" << '\n';
 			break;
 		case Cast:
 			ss << "cast" << '\n';
-			ss << left1 << "type: " << this->typeCast_->GetName() << '\n';
+			ss << left1 << "type: " << this->castTo_->GetName() << '\n';
 			this->children_[0]->PrintRecursive(ss, depth);
 			return;
 		case Multiply:
@@ -912,13 +964,13 @@ struct ExpressionNode: public ASTNode {
 	ExpressionNode(unsigned lineNumber,
 			Literal * literal) :
 		ASTNode(lineNumber), constructorCase_(3), literal_(literal) {
-		this->resultType_ = ValidType::ConvertLiteralToVariableType(literal_->type_);
+		this->resultType_ = Literal::ConvertToValidType(literal_);
+		assert(this->resultType_);
 	}
 
 	ExpressionNode(unsigned lineNumber,
 			ExistingVarNode * existingVarNode) :
 		ASTNode(lineNumber), constructorCase_(4) {
-		this->resultType_ = ValidType::ConvertLiteralToVariableType(literal_->type_);
 
 		VarTableEntry hit = ASTNode::varTable_.find(existingVarNode->identifier_);
 		if (hit==ASTNode::varTable_.end()) {
@@ -929,8 +981,7 @@ struct ExpressionNode: public ASTNode {
 			ss << " not declared. \n";
 			ASTNode::compilerErrors_.push_back(ss.str());
 		} else {
-			ValidType * vtype = get<0>(hit->second);
-			this->resultType_ = vtype->varType_;
+			this->resultType_ = get<0>(hit->second);
 		}
 		this->children_.push_back(existingVarNode);
 	}
@@ -949,7 +1000,7 @@ struct ExpressionNode: public ASTNode {
 			ASTNode::compilerErrors_.push_back(ss.str());
 		} else {
 			vector<ValidType *> vtypes = get<0>(hit->second);
-			this->resultType_ = vtypes[0]->varType_;
+			this->resultType_ = vtypes[0];
 		}
 		this->children_.push_back(existingFuncNode);
 	}
@@ -969,13 +1020,14 @@ struct ExpressionNode: public ASTNode {
 			get<1>(recursiveFuncPlaceHolder_) = lineNumber;
 		} else {
 			vector<ValidType *> vtypes = get<0>(hit->second);
-			this->resultType_ = vtypes[0]->varType_;
+			this->resultType_ = vtypes[0];
 		}
 	}
 
 	virtual ~ExpressionNode() {
 		if (this->literal_ != nullptr) {
 			delete this->literal_;
+			this->literal_ = nullptr;
 		}
 	}
 
@@ -1038,6 +1090,12 @@ struct ExpressionNode: public ASTNode {
 
 	llvm::Value *
 	GenerateCode(llvm::BasicBlock * endBlock) {
+
+//		llvm::Function * parentFunction = GlobalBuilder.GetInsertBlock()->getParent();
+//		llvm::BasicBlock * startBlock = llvm::BasicBlock::Create(GlobalContext, "expr_entry", parentFunction, nullptr);
+//		llvm::BasicBlock * endOfMiddleBlock = llvm::BasicBlock::Create(GlobalContext, "expr_exit", parentFunction, nullptr);
+//		GlobalBuilder.SetInsertPoint(startBlock);
+
 		llvm::Value * ret = nullptr;
 		switch (this->constructorCase_) {
 		case 0:
@@ -1067,7 +1125,8 @@ struct ExpressionNode: public ASTNode {
 		}
 			break;
 		case 4:
-			return this->children_[0]->GenerateCode(endBlock);
+			ret = this->children_[0]->GenerateCode(endBlock);
+			break;
 		case 5:
 			cout << "unhandled yet" << endl;
 			break;
@@ -1075,6 +1134,12 @@ struct ExpressionNode: public ASTNode {
 			cout << "unhandled yet" << endl;
 			break;
 		}
+
+//		if (endBlock!=nullptr) {
+//			GlobalBuilder.SetInsertPoint(endOfMiddleBlock);
+//			GlobalBuilder.CreateBr(endBlock);
+//		}
+
 		return ret;
 	}
 };
@@ -1125,9 +1190,11 @@ struct StatementNode: public ASTNode {
 	virtual ~StatementNode() {
 		if (this->controlFlow_ != nullptr) {
 			delete this->controlFlow_;
+			this->controlFlow_ = nullptr;
 		}
 		if (this->function_ != nullptr) {
 			delete this->function_;
+			this->function_ = nullptr;
 		}
 	}
 
@@ -1165,11 +1232,17 @@ struct StatementNode: public ASTNode {
 		this->children_.push_back(expressionNode);
 
 		if(this->varDecl_->type_->varType_ == RefVarType){
-			if(expressionNode->constructorCase_ != 4){
-				stringstream ss;
-				ss << "error: line " << lineNumber << ": ";
-				ss << "ref variable must be initialized with a variable.\n";
-				ASTNode::compilerErrors_.push_back(ss.str());
+			// ref int $x = $y + 4;
+			if (expressionNode->constructorCase_ != 4) {
+				ASTNode::LogError(this->lineNumber_,
+				"ref variable must be initialized with a variable.\n");
+			}
+			// ref float $y = $z;
+			// ref int $x = $y;
+			else if (ValidType::GetUnderlyingType(expressionNode->resultType_)->varType_ !=
+					 ValidType::GetUnderlyingType(this->varDecl_->type_)->varType_) {
+				ASTNode::LogError(this->lineNumber_,
+				"underlying ref types different.\n");
 			}
 		}
 	}
@@ -1213,6 +1286,7 @@ struct StatementNode: public ASTNode {
 			ASTNode(lineNumber),
 			controlFlow_(elseControl),
 			stmtName_("ifstmt"),
+			exprNode_(expressionNode),
 			constructorCase_(7) {
 		this->children_.push_back(expressionNode);
 		this->children_.push_back(statementNode1);
@@ -1292,60 +1366,100 @@ struct StatementNode: public ASTNode {
 	llvm::Value *
 	GenerateCode(llvm::BasicBlock * endBlock) {
 		llvm::Function * parentFunction = GlobalBuilder.GetInsertBlock()->getParent();
-		llvm::BasicBlock * ret = llvm::BasicBlock::Create(GlobalContext, "stmt", parentFunction, endBlock);
-		GlobalBuilder.SetInsertPoint(ret);
+		llvm::BasicBlock * startBlock = llvm::BasicBlock::Create(GlobalContext, "stmt_entry", parentFunction, nullptr);
+		llvm::BasicBlock * endOfMiddleBlock = llvm::BasicBlock::Create(GlobalContext, "stmt_exit", parentFunction, nullptr);
+		GlobalBuilder.SetInsertPoint(startBlock);
 
 		switch (this->constructorCase_) {
+		case 0: // blk ( in an if or else statement i.e.)
+		{
+
+			llvm::BasicBlock * middleBlock = (llvm::BasicBlock *)
+				this->children_[0]->GenerateCode(endOfMiddleBlock);
+			GlobalBuilder.SetInsertPoint(startBlock);
+			GlobalBuilder.CreateBr(middleBlock);
+
+		}
+			break;
 		case 1:
 			GlobalBuilder.CreateRetVoid();
+			GlobalBuilder.SetInsertPoint(startBlock);
+			GlobalBuilder.CreateBr(endOfMiddleBlock);
 			break;
 		case 2:
 		{
-			llvm::Value * rhs = this->exprNode_->GenerateCode(ret);
+			llvm::Value * rhs = this->exprNode_->GenerateCode(endOfMiddleBlock);
 			GlobalBuilder.CreateRet(rhs);
+			GlobalBuilder.SetInsertPoint(startBlock);
+			GlobalBuilder.CreateBr(endOfMiddleBlock);
 			break;
 		}
 		case 3:
 		{
-			llvm::Value * rhs = this->exprNode_->GenerateCode(endBlock);
-			this->varDecl_->GenerateCode(endBlock);
-			llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[this->varDecl_->identifier_]);
-
+			llvm::Value * rhs = this->exprNode_->GenerateCode(endOfMiddleBlock);
+			this->varDecl_->GenerateCode(endOfMiddleBlock);
+			llvm::AllocaInst * alloca = nullptr;
 			// check for ref type for store instruction
 			ValidType * vtype = get<0>(ASTNode::varTable_[this->varDecl_->identifier_]);
 			assert(vtype);
 			if (vtype->GetVarType()==RefVarType) {
+				// dont need to generate a store here, since
+				// references dont need stack space
 				ExistingVarNode * existingVarNode = (ExistingVarNode *)
 						this->exprNode_->children_[0];
-				llvm::AllocaInst * rhsPtr = get<1>(
-					ASTNode::varTable_[existingVarNode->identifier_]);
-				GlobalBuilder.CreateStore(rhsPtr, alloca);
+
+				get<1>(ASTNode::varTable_[this->varDecl_->identifier_]) =
+					get<1>(ASTNode::varTable_[existingVarNode->identifier_]);
+
 			} else {
+				alloca = get<1>(ASTNode::varTable_[this->varDecl_->identifier_]);
 				GlobalBuilder.CreateStore(rhs, alloca);
 			}
+			GlobalBuilder.SetInsertPoint(startBlock);
+			GlobalBuilder.CreateBr(endOfMiddleBlock);
 		}
 			break;
 		case 4:
+			this->exprNode_->GenerateCode(endOfMiddleBlock);
+			GlobalBuilder.SetInsertPoint(startBlock);
+			GlobalBuilder.CreateBr(endOfMiddleBlock);
+			break;
+		case 7: // if else
 		{
-			this->exprNode_->GenerateCode(endBlock);
+			llvm::Value * condValue = this->exprNode_->GenerateCode(nullptr);
+
+			// generate the condition
+//			llvm::BasicBlock * condBlock =
+//				llvm::BasicBlock::Create(GlobalContext, "cond_blk", parentFunction, endBlock);
+//
+			// generate if portion
+			llvm::BasicBlock * ifStmtBlock =
+				(llvm::BasicBlock *)this->children_[1]->GenerateCode(endOfMiddleBlock);
+
+			// generate else portion
+			llvm::BasicBlock * elseStmtBlock =
+				(llvm::BasicBlock *)this->children_[2]->GenerateCode(endOfMiddleBlock);
+
+			GlobalBuilder.SetInsertPoint(startBlock);
+			GlobalBuilder.CreateCondBr(condValue, ifStmtBlock, elseStmtBlock);
+//			GlobalBuilder.SetInsertPoint(ret);
+//			GlobalBuilder.CreateBr((llvm::BasicBlock *)condBlock);
 		}
 			break;
+
 		default:
 			cout << "unhandled case in statement generate code" << endl;
 			break;
 		}
-//		GlobalBuilder.CreateBr(endBlock);
-		return ret;
+
+		if (endBlock!=nullptr) {
+			GlobalBuilder.SetInsertPoint(endOfMiddleBlock);
+			GlobalBuilder.CreateBr(endBlock);
+		}
+
+		return startBlock;
 	}
 
-//	llvm::Value *
-//	GetLLVMReturnValueRecursive() {
-//		if (this->constructorCase_==2) { // a return expression statemnet
-//			return this->exprNode_->GenerateCode(nullptr);
-//		} else {
-//			return ASTNode::GetLLVMReturnValueRecursive();
-//		}
-//	}
 };
 
 struct StatementsNode: public ASTNode {
@@ -1364,24 +1478,45 @@ struct StatementsNode: public ASTNode {
 	}
 
 	llvm::Value *
-	GenerateCode(llvm::BasicBlock * endBlock) {
+	GenerateCode(llvm::BasicBlock * endBlock3) {
 		llvm::Function * parentfunction = GlobalBuilder.GetInsertBlock()->getParent();
-		llvm::BasicBlock * ret = llvm::BasicBlock::Create(GlobalContext, "stmts", parentfunction, endBlock);
-		GlobalBuilder.SetInsertPoint(ret);
-		vector<llvm::BasicBlock *> statementBlocks;
-		for (int i=0; i<this->children_.size(); ++i) {
-			llvm::BasicBlock * statementBlock = (llvm::BasicBlock *)
-				this->children_[i]->GenerateCode(endBlock);
-			statementBlocks.push_back(statementBlock);
+		llvm::BasicBlock * startBlock = llvm::BasicBlock::Create(GlobalContext, "stmts_entry", parentfunction, nullptr);
+//		vector<llvm::BasicBlock *> statementBlocks;
+//		for (int i=0; i<this->children_.size(); ++i) {
+//			llvm::BasicBlock * statementBlock = (llvm::BasicBlock *)
+//				this->children_[i]->GenerateCode(endBlock);
+//			statementBlocks.push_back(statementBlock);
+//		}
+//
+//		for (int i=0; i<this->children_.size()-1; ++i) {
+//			GlobalBuilder.SetInsertPoint(statementBlocks[i]);
+//			GlobalBuilder.CreateBr(statementBlocks[i+1]);
+//		}
+//		GlobalBuilder.SetInsertPoint(ret);
+//		GlobalBuilder.CreateBr(statementBlocks[0]);
+
+
+
+		llvm::BasicBlock * endOfMiddleBlock = startBlock;
+		for (auto n: this->children_) {
+
+			llvm::BasicBlock * endBlock =
+				llvm::BasicBlock::Create(GlobalContext, "stmts_merge", parentfunction, endBlock);
+
+			llvm::BasicBlock * newBlock = (llvm::BasicBlock *)n->GenerateCode(endBlock);
+
+			GlobalBuilder.SetInsertPoint(endOfMiddleBlock);
+			GlobalBuilder.CreateBr(newBlock);
+
+			endOfMiddleBlock = endBlock;
+
+		}
+		if (endBlock3!=nullptr) {
+			GlobalBuilder.SetInsertPoint(endOfMiddleBlock);
+			GlobalBuilder.CreateBr(endBlock3);
 		}
 
-		for (int i=0; i<this->children_.size()-1; ++i) {
-			GlobalBuilder.SetInsertPoint(statementBlocks[i]);
-			GlobalBuilder.CreateBr(statementBlocks[i+1]);
-		}
-		GlobalBuilder.SetInsertPoint(ret);
-		GlobalBuilder.CreateBr(statementBlocks[0]);
-		return ret;
+		return startBlock;
 	}
 
 	void
@@ -1420,14 +1555,21 @@ struct BlockNode: public ASTNode {
 
 	llvm::Value *
 	GenerateCode(llvm::BasicBlock * endBlock) {
-		llvm::Function *parentfunction = GlobalBuilder.GetInsertBlock()->getParent();
-		llvm::BasicBlock * ret = llvm::BasicBlock::Create(GlobalContext, "blk", parentfunction, endBlock);
-		GlobalBuilder.SetInsertPoint(ret);
-		llvm::Value * blockUnder = this->children_[0]->GenerateCode(endBlock);
-		GlobalBuilder.SetInsertPoint(ret);
-		GlobalBuilder.CreateBr((llvm::BasicBlock *)blockUnder);
-		return ret;
+		llvm::Function * parentfunction = GlobalBuilder.GetInsertBlock()->getParent();
+		llvm::BasicBlock * startBlock = llvm::BasicBlock::Create(GlobalContext, "blk_entry", parentfunction);
+		llvm::BasicBlock * endOfMiddleBlock = llvm::BasicBlock::Create(GlobalContext, "blk_end", parentfunction);
+		llvm::BasicBlock * middleBlock = (llvm::BasicBlock *)this->children_[0]->GenerateCode(endOfMiddleBlock);
 
+		GlobalBuilder.SetInsertPoint(startBlock);
+		GlobalBuilder.CreateBr(middleBlock);
+
+		if (endBlock!=nullptr) {
+			GlobalBuilder.SetInsertPoint(endOfMiddleBlock);
+			GlobalBuilder.CreateBr(endBlock);
+		}
+
+
+		return startBlock;
 	}
 
 	void
@@ -1441,8 +1583,6 @@ struct BlockNode: public ASTNode {
 			this->children_[0]->PrintRecursive(ss, depth+1);
 		}
 	}
-
-
 };
 
 
@@ -1455,7 +1595,7 @@ struct FuncNode : public ASTNode {
 	int constructorCase_ = -1;
 
 	llvm::Function *
-	GenerateCode(llvm::BasicBlock * endBlock) {
+	GenerateCode(llvm::BasicBlock *) {
 		llvm::Type * llvmRetType = this->retType_->GetLLVMType();
 		llvm::FunctionType * functionType = nullptr;
 		if (this->constructorCase_==0) {
@@ -1484,7 +1624,8 @@ struct FuncNode : public ASTNode {
 
 		// create a new basic block to start insertion into
 		llvm::BasicBlock * entryBlock = llvm::BasicBlock::Create(GlobalContext, "entry", ret);
-		GlobalBuilder.SetInsertPoint(entryBlock);
+		llvm::BasicBlock * endBlock = llvm::BasicBlock::Create(GlobalContext, "exit", ret);
+
 //		llvm::Value * retVal = this->blockNode_->GetLLVMReturnValueRecursive();
 //
 //		if (retVal != nullptr) {
@@ -1492,12 +1633,20 @@ struct FuncNode : public ASTNode {
 //		} else {
 //			GlobalBuilder.CreateRetVoid();
 //		}
-
-		llvm::BasicBlock * blockUnder = (llvm::BasicBlock *)
-				this->blockNode_->GenerateCode(nullptr);
 		GlobalBuilder.SetInsertPoint(entryBlock);
-		GlobalBuilder.CreateBr(blockUnder);
+		llvm::BasicBlock * middleBlock = (llvm::BasicBlock *)
+				this->blockNode_->GenerateCode(endBlock);
+
+		GlobalBuilder.SetInsertPoint(entryBlock);
+		GlobalBuilder.CreateBr(middleBlock);
+		GlobalBuilder.SetInsertPoint(endBlock);
+		GlobalBuilder.CreateUnreachable();
 		llvm::verifyFunction(*ret);
+//		llvm::legacy::FunctionPassManager  *functionPassManager =
+//				new FunctionPassManager(GlobalModule);
+//
+//		functionPassManager->add(llvm::createCFGSimplificationPass());
+
 		return ret;
 	}
 
@@ -1596,6 +1745,7 @@ struct FuncNode : public ASTNode {
 	virtual ~FuncNode() {
 		if (this->retType_ != nullptr) {
 			delete this->retType_;
+			this->retType_ = nullptr;
 		}
 	}
 
