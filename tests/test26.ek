@@ -1,0 +1,12 @@
+def void inc(ref int $i) {
+	$i = $i + 1;
+}
+
+def int run() {
+	int $x = 3;
+	while ($x<10) {
+		inc($x);
+	}
+	
+	return $x;
+}

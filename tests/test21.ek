@@ -1,0 +1,7 @@
+def int run() {
+	int $x = 3;
+	if ($x>2) {
+		$x = $x + 4;
+	}
+	return $x;
+}

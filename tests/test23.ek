@@ -1,0 +1,12 @@
+def int func() {
+	return 3;
+}
+
+def int run() {
+	int $x = 3;
+	while ($x<10) {
+		$x = $x + 1;
+	}
+	int $y = func();
+	return $x + $y;
+}

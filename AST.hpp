@@ -282,7 +282,7 @@ struct VdeclNode : public ASTNode {
 //				cout << "unhandled case in vdeclnode" << endl;
 //				break;
 //			}
-			allocaInst = get<1>(ASTNode::varTable_["x"]);
+//			allocaInst = get<1>(ASTNode::varTable_["x"]);
 		}
 			break;
 		default:
@@ -336,6 +336,7 @@ struct ExistingVarNode: public ASTNode {
 	string identifier_;
 	ExistingVarNode(unsigned lineNumber, string identifier) :
 		ASTNode(lineNumber), identifier_(identifier.substr(1, string::npos)) {
+
 		VarTableEntry hit = ASTNode::varTable_.find(this->identifier_);
 		this->resultType_ = get<0>(hit->second);
 		if (hit==ASTNode::varTable_.end()) {
@@ -360,7 +361,6 @@ struct ExistingVarNode: public ASTNode {
 	GenerateCode(llvm::BasicBlock * endBlock) {
 		llvm::Value * val = GetLLVMValue(this->identifier_);
 		ValidType * vtype = get<0>(ASTNode::varTable_[this->identifier_]);
-
 		if (vtype->varType_==RefVarType) {
 			llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[this->identifier_]);
 			llvm::LoadInst * loadInstruction =  GlobalBuilder.CreateLoad(alloca, this->identifier_);
@@ -384,6 +384,21 @@ struct ExistingFuncNode: public ASTNode {
 		ss << left1 << "globid: " << this->identifier_ << '\n';
 	}
 
+//	virtual llvm::Value *
+//	GetLLVMReturnValue(string identifier) {
+//		llvm::Value * ret = nullptr;
+//		VarTableEntry hit = ASTNode::varTable_.find(identifier);
+//		if (ASTNode::varTable_.end() != hit) {
+//			ret = get<1>(hit->second);
+//		}
+//		return ret;
+//	}
+
+	llvm::Value *
+	GenerateCode(llvm::BasicBlock * endBlock) {
+		llvm::Function * function = get<1>(ASTNode::funcTable_[this->identifier_]);
+		return function;
+	}
 };
 
 
@@ -526,7 +541,7 @@ struct ExternsNode : public ASTNode {
 			if (i!=this->children_.size()-1)
 				ss << left3 << "-" << '\n';
 		}
-	};
+	}
 
 };
 
@@ -1091,19 +1106,17 @@ struct ExpressionNode: public ASTNode {
 	llvm::Value *
 	GenerateCode(llvm::BasicBlock * endBlock) {
 
-//		llvm::Function * parentFunction = GlobalBuilder.GetInsertBlock()->getParent();
-//		llvm::BasicBlock * startBlock = llvm::BasicBlock::Create(GlobalContext, "expr_entry", parentFunction, nullptr);
-//		llvm::BasicBlock * endOfMiddleBlock = llvm::BasicBlock::Create(GlobalContext, "expr_exit", parentFunction, nullptr);
-//		GlobalBuilder.SetInsertPoint(startBlock);
-
 		llvm::Value * ret = nullptr;
 		switch (this->constructorCase_) {
 		case 0:
-			return this->children_[0]->GenerateCode(endBlock);
+			ret = this->children_[0]->GenerateCode(endBlock);
+			break;
 		case 1:
-			return this->children_[0]->GenerateCode(endBlock);
+			ret = this->children_[0]->GenerateCode(endBlock);
+			break;
 		case 2:
-			return this->children_[0]->GenerateCode(endBlock);
+			ret = this->children_[0]->GenerateCode(endBlock);
+			break;
 		case 3:
 		{
 			unique_ptr<LiteralValue>& lv = literal_->GetValue();
@@ -1128,17 +1141,58 @@ struct ExpressionNode: public ASTNode {
 			ret = this->children_[0]->GenerateCode(endBlock);
 			break;
 		case 5:
-			cout << "unhandled yet" << endl;
+		{
+			ExistingFuncNode * existingFuncNode = (ExistingFuncNode *)this->children_[0];
+			llvm::Function * function = (llvm::Function *)
+					existingFuncNode->GenerateCode(nullptr);
+			llvm::Type * retType = function->getReturnType();
+			if (retType->isVoidTy()) {
+				ret = GlobalBuilder.CreateCall(function, llvm::None);
+			} else {
+				ret = GlobalBuilder.CreateCall(function, llvm::None, "existing_func_call");
+			}
+		}
 			break;
 		case 6:
-			cout << "unhandled yet" << endl;
+		{
+			ExistingFuncNode * existingFuncNode = (ExistingFuncNode *)this->children_[0];
+			llvm::Function * function = (llvm::Function *)
+					existingFuncNode->GenerateCode(nullptr);
+			vector<llvm::Value *> llvmFunctionParams;
+			vector<ValidType *> funcParams =
+				get<0>(ASTNode::funcTable_[existingFuncNode->identifier_]);
+
+			for (int i=1; i<this->children_.size(); ++i) {
+				if (funcParams[i]->varType_==RefVarType) {
+					ExistingVarNode * existingVar = (ExistingVarNode*) (this->children_[i]->children_[0]);
+					llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[existingVar->identifier_]);
+
+					llvm::AllocaInst * newPtrAlloca = GlobalBuilder.CreateAlloca(
+							funcParams[i]->GetLLVMType(),
+							nullptr, existingVar->identifier_);
+
+					llvm::StoreInst * storeInst = GlobalBuilder.CreateStore(alloca, newPtrAlloca);
+
+					llvm::LoadInst * loadInstruction =  GlobalBuilder.CreateLoad(
+							newPtrAlloca, existingVar->identifier_);
+
+					llvmFunctionParams.push_back(loadInstruction);
+
+				} else {
+					llvmFunctionParams.push_back(
+						this->children_[i]->GenerateCode(endBlock));
+				}
+			}
+			if (function->getReturnType()->isVoidTy()) {
+				ret = GlobalBuilder.CreateCall(function,
+					llvmFunctionParams);
+			} else {
+				ret = GlobalBuilder.CreateCall(function,
+						llvmFunctionParams, "existing_func_call");
+			}
+		}
 			break;
 		}
-
-//		if (endBlock!=nullptr) {
-//			GlobalBuilder.SetInsertPoint(endOfMiddleBlock);
-//			GlobalBuilder.CreateBr(endBlock);
-//		}
 
 		return ret;
 	}
@@ -1261,6 +1315,7 @@ struct StatementNode: public ASTNode {
 			ASTNode(lineNumber),
 			controlFlow_(whileControl),
 			stmtName_("whilestmt"),
+			exprNode_(expressionNode),
 			constructorCase_(5) {
 		this->children_.push_back(expressionNode);
 		this->children_.push_back(statementNode);
@@ -1273,6 +1328,7 @@ struct StatementNode: public ASTNode {
 			ASTNode(lineNumber),
 			controlFlow_(ifControl),
 			stmtName_("ifstmt"),
+			exprNode_(expressionNode),
 			constructorCase_(6) {
 		this->children_.push_back(expressionNode);
 		this->children_.push_back(statementNode);
@@ -1420,18 +1476,41 @@ struct StatementNode: public ASTNode {
 		}
 			break;
 		case 4:
+		{
 			this->exprNode_->GenerateCode(endOfMiddleBlock);
 			GlobalBuilder.SetInsertPoint(startBlock);
 			GlobalBuilder.CreateBr(endOfMiddleBlock);
+		}
+			break;
+		case 5:
+		{
+			llvm::Value * condValue = this->exprNode_->GenerateCode(nullptr);
+
+			// generate while portion
+			llvm::BasicBlock * whileStmtBlock =
+					(llvm::BasicBlock *)this->children_[1]->GenerateCode(startBlock);
+
+			GlobalBuilder.SetInsertPoint(startBlock);
+			GlobalBuilder.CreateCondBr(condValue, whileStmtBlock, endOfMiddleBlock);
+		}
+			break;
+		case 6:
+		{
+			llvm::Value * condValue = this->exprNode_->GenerateCode(nullptr);
+
+			// generate if portion
+			llvm::BasicBlock * ifStmtBlock =
+				(llvm::BasicBlock *)this->children_[1]->GenerateCode(endOfMiddleBlock);
+
+			GlobalBuilder.SetInsertPoint(startBlock);
+			GlobalBuilder.CreateCondBr(condValue, ifStmtBlock, endOfMiddleBlock);
+
+		}
 			break;
 		case 7: // if else
 		{
 			llvm::Value * condValue = this->exprNode_->GenerateCode(nullptr);
 
-			// generate the condition
-//			llvm::BasicBlock * condBlock =
-//				llvm::BasicBlock::Create(GlobalContext, "cond_blk", parentFunction, endBlock);
-//
 			// generate if portion
 			llvm::BasicBlock * ifStmtBlock =
 				(llvm::BasicBlock *)this->children_[1]->GenerateCode(endOfMiddleBlock);
@@ -1442,8 +1521,6 @@ struct StatementNode: public ASTNode {
 
 			GlobalBuilder.SetInsertPoint(startBlock);
 			GlobalBuilder.CreateCondBr(condValue, ifStmtBlock, elseStmtBlock);
-//			GlobalBuilder.SetInsertPoint(ret);
-//			GlobalBuilder.CreateBr((llvm::BasicBlock *)condBlock);
 		}
 			break;
 
@@ -1594,62 +1671,6 @@ struct FuncNode : public ASTNode {
 	bool isRunFunc_ = false;
 	int constructorCase_ = -1;
 
-	llvm::Function *
-	GenerateCode(llvm::BasicBlock *) {
-		llvm::Type * llvmRetType = this->retType_->GetLLVMType();
-		llvm::FunctionType * functionType = nullptr;
-		if (this->constructorCase_==0) {
-			functionType = llvm::FunctionType::get(llvmRetType, false);
-		} else if (this->constructorCase_==1) {
-			functionType = llvm::FunctionType::get(llvmRetType, this->llvmParamTypes_, false);
-		}
-
-		string name = this->identifier_;
-		if (this->isRunFunc_) {
-			name = "main";
-		}
-		llvm::Function * ret = llvm::Function::Create(
-			functionType, llvm::Function::ExternalLinkage,
-			name, GlobalModule);
-
-		// set names for the arguments
-		if (this->constructorCase_==1) {// there are arguments
-			unsigned idx = 0;
-			VdeclsNode * vdeclsNode = (VdeclsNode *)this->children_[0];
-			for (auto &arg : ret->args()) {
-				VdeclNode * vdeclNode = (VdeclNode *)vdeclsNode->children_[idx];
-				arg.setName(vdeclNode->identifier_);
-			}
-		}
-
-		// create a new basic block to start insertion into
-		llvm::BasicBlock * entryBlock = llvm::BasicBlock::Create(GlobalContext, "entry", ret);
-		llvm::BasicBlock * endBlock = llvm::BasicBlock::Create(GlobalContext, "exit", ret);
-
-//		llvm::Value * retVal = this->blockNode_->GetLLVMReturnValueRecursive();
-//
-//		if (retVal != nullptr) {
-//			GlobalBuilder.CreateRet(retVal);
-//		} else {
-//			GlobalBuilder.CreateRetVoid();
-//		}
-		GlobalBuilder.SetInsertPoint(entryBlock);
-		llvm::BasicBlock * middleBlock = (llvm::BasicBlock *)
-				this->blockNode_->GenerateCode(endBlock);
-
-		GlobalBuilder.SetInsertPoint(entryBlock);
-		GlobalBuilder.CreateBr(middleBlock);
-		GlobalBuilder.SetInsertPoint(endBlock);
-		GlobalBuilder.CreateUnreachable();
-		llvm::verifyFunction(*ret);
-//		llvm::legacy::FunctionPassManager  *functionPassManager =
-//				new FunctionPassManager(GlobalModule);
-//
-//		functionPassManager->add(llvm::createCFGSimplificationPass());
-
-		return ret;
-	}
-
 	FuncNode(unsigned lineNumber,
 			ValidType * retType, string identifier,
 		BlockNode * blockNode) : ASTNode(lineNumber), retType_(retType),
@@ -1714,6 +1735,74 @@ struct FuncNode : public ASTNode {
 		CheckFuncTable(lineNumber, identifier);
 
 		get<0>(ASTNode::funcTable_[identifier]) = vTypes;
+	}
+
+	llvm::Function *
+	GenerateCode(llvm::BasicBlock *) {
+		llvm::Type * llvmRetType = this->retType_->GetLLVMType();
+		llvm::FunctionType * functionType = nullptr;
+		if (this->constructorCase_==0) {
+			functionType = llvm::FunctionType::get(llvmRetType, false);
+		} else if (this->constructorCase_==1) {
+			functionType = llvm::FunctionType::get(llvmRetType, this->llvmParamTypes_, false);
+		}
+
+		string name = this->identifier_;
+		if (this->isRunFunc_) {
+			name = "main";
+		}
+		llvm::Function * ret = llvm::Function::Create(
+			functionType, llvm::Function::ExternalLinkage,
+			name, GlobalModule);
+
+		// create a new basic block to start insertion into
+		llvm::BasicBlock * entryBlock = llvm::BasicBlock::Create(GlobalContext, "entry", ret);
+		llvm::BasicBlock * endBlock = llvm::BasicBlock::Create(GlobalContext, "exit", ret);
+		GlobalBuilder.SetInsertPoint(entryBlock);
+		// set names for the arguments
+		if (this->constructorCase_==1) {// there are arguments
+			unsigned idx = 0;
+			VdeclsNode * vdeclsNode = (VdeclsNode *)this->children_[0];
+			for (auto &arg : ret->args()) {
+				VdeclNode * vdeclNode = (VdeclNode *)vdeclsNode->children_[idx];
+				arg.setName(vdeclNode->identifier_);
+				get<0>(ASTNode::varTable_[vdeclNode->identifier_]) = vdeclNode->type_;
+//				llvm::AllocaInst * alloca = vdeclNode->type_->CreateEntryBlockAlloca(
+//						ret, vdeclNode->identifier_);
+//				get<1>(ASTNode::varTable_[vdeclNode->identifier_]) = alloca;
+//				GlobalBuilder.CreateStore(&arg, alloca);
+
+				if (vdeclNode->type_->varType_!=RefVarType) {
+					llvm::AllocaInst * alloca = vdeclNode->type_->CreateEntryBlockAlloca(
+							ret, vdeclNode->identifier_);
+					get<1>(ASTNode::varTable_[vdeclNode->identifier_]) = alloca;
+					GlobalBuilder.CreateStore(&arg, alloca);
+				} else {
+					get<1>(ASTNode::varTable_[vdeclNode->identifier_]) = (llvm::AllocaInst *)&arg;
+					//GlobalBuilder.CreateStore(&arg, alloca);
+				}
+				++idx;
+			}
+		}
+
+
+		llvm::BasicBlock * middleBlock = (llvm::BasicBlock *)
+				this->blockNode_->GenerateCode(endBlock);
+
+		GlobalBuilder.SetInsertPoint(entryBlock);
+		GlobalBuilder.CreateBr(middleBlock);
+		GlobalBuilder.SetInsertPoint(endBlock);
+		if (this->retType_->varType_==VoidVarType) {
+			GlobalBuilder.CreateRetVoid();
+		} else {
+			GlobalBuilder.CreateUnreachable();
+		}
+		llvm::verifyFunction(*ret);
+
+		// now put it in func table
+		get<1>(ASTNode::funcTable_[this->identifier_]) = ret;
+
+		return ret;
 	}
 
 	void

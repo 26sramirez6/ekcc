@@ -1,0 +1,12 @@
+def int sum(int $i, int $j) {
+	return $i + $j;
+}
+
+def int run() {
+	int $x = 3;
+	while ($x<10) {
+		$x = $x + 1;
+	}
+	int $y = sum(4, 5);
+	return $x + $y;
+}

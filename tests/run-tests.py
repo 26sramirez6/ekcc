@@ -26,6 +26,12 @@ true_outputs = [
 (0,32), #test 18
 (0,10), #test 19
 (0,7), #test 20
+(0,7), #test 21
+(0,10), #test 22
+(0,13), #test 23
+(0,19), #test 24
+(0,25), #test 25
+(0,10), #test 26
 ]
 total_passed = 0
 failed = []

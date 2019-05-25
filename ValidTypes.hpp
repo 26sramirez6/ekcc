@@ -119,6 +119,24 @@ struct ValidType {
 		return nullptr;
 	}
 
+	llvm::AllocaInst *
+	CreateEntryBlockAlloca(llvm::Function * function, const string &varName) {
+		llvm::IRBuilder<> temp(&function->getEntryBlock(),
+			function->getEntryBlock().begin());
+		return temp.CreateAlloca(this->GetLLVMType(), nullptr, varName);
+//		switch (this->varType_) {
+//		case EmptyVarType: return nullptr;
+//		case IntVarType: return temp.CreateAlloca(llvm::Type::getInt32Ty(GlobalContext), nullptr, varName);
+//		case CintVarType: return temp.CreateAlloca(llvm::Type::getInt32Ty(GlobalContext), nullptr, varName);
+//		case StringVarType: return nullptr;
+//		case FloatVarType: return temp.CreateAlloca(llvm::Type::getFloatTy(GlobalContext), nullptr, varName);
+//		case BooleanVarType: return temp.CreateAlloca(llvm::Type::getInt1Ty(GlobalContext), nullptr, varName);
+//		case RefVarType: return temp.CreateAlloca(this->GetLLVMType(), nullptr, varName);
+//		case VoidVarType: return nullptr;
+//		}
+		return nullptr;
+	}
+
 	static bool
 	IsValidBinaryOp(ValidType * validTypeL, ValidType * validTypeR) {
 		if (validTypeL==nullptr || validTypeR==nullptr) {
