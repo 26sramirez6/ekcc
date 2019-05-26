@@ -251,15 +251,15 @@ struct VdeclNode : public ASTNode {
 		llvm::AllocaInst * allocaInst = nullptr;
 		switch (this->type_->varType_) {
 		case IntVarType:
-			allocaInst = CreateEntryBlockAlloca_int(
+			allocaInst = this->type_->CreateEntryBlockAlloca(
 					parentFunction, this->identifier_);
 			break;
 		case FloatVarType:
-			allocaInst = CreateEntryBlockAlloca_float(
+			allocaInst = this->type_->CreateEntryBlockAlloca(
 					parentFunction, this->identifier_);
 			break;
 		case BooleanVarType:
-			allocaInst = CreateEntryBlockAlloca_bool(
+			allocaInst = this->type_->CreateEntryBlockAlloca(
 					parentFunction, this->identifier_);
 			break;
 		case RefVarType:
@@ -687,6 +687,7 @@ struct BinaryOperationNode: public ASTNode {
 		switch (this->operationType_) {
 		case Assign:
 		{
+			cout << "assign here" << endl;
 			R = this->children_[1]->GenerateCode(endBlock);
 			ExistingVarNode * existingNode = (ExistingVarNode *)this->children_[0];
 			llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[existingNode->identifier_]);
@@ -696,6 +697,7 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case Cast:
 		{
+			cout << "cast here" << endl;
 			R = this->children_[0]->GenerateCode(endBlock);
 			llvm::Type * castTo = ValidType::ConvertVariableTypeToLLVMType(
 					this->resultType_->varType_);

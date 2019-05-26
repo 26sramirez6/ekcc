@@ -1,0 +1,13 @@
+def void inc(ref float $i) {
+	$i = $i + 1.0;
+}
+
+def int run() {
+	#float $x = 3.0;
+	#while ($x<10.0) {
+	#	inc($x);
+	#}
+    int $y = 1;
+	$y = [int]10.0;
+	return $y;
+}
