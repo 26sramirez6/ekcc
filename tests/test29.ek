@@ -1,0 +1,9 @@
+def int run() {
+	float $a = 5.4;
+	float $b = 4.6;
+	print 8.5;
+	if ($a==5.4) {
+		return 0;
+	}
+	return 1;
+}

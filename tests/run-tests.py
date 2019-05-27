@@ -6,6 +6,7 @@ from subprocess import Popen, PIPE
 subprocess.getoutput("rm -r -f out")
 subprocess.getoutput("mkdir out")
 true_outputs = [
+# ast tests below
 1, #test 1
 1, #test 2
 1, #test 3
@@ -18,6 +19,7 @@ true_outputs = [
 1, #test 10 
 1, #test 11
 1, #test 12
+# llvm tests below
 (0,4), #test 13
 (0,9), #test 14
 (0,18),#test 15
@@ -32,6 +34,10 @@ true_outputs = [
 (0,19), #test 24
 (0,25), #test 25
 (0,10), #test 26
+# print tests below
+(0,5,"5\n"), #test 27 
+(0,5,"5\n"), #test 28
+(0,0,"10\n"), #test 28
 ]
 total_passed = 0
 failed = []
@@ -71,6 +77,12 @@ for i in range(1,len(true_outputs)+1):
             if os.path.isfile("./out/test{0}".format(i)):
                 pipe = Popen(["./out/test{0}".format(i)], stdout=PIPE)
                 test_output = pipe.communicate()[0].decode("utf-8")
+                if i>26: 
+                    print(test_output)
+                    if test_output!=true_outputs[i-1][2]:
+                        print("Test {0} failed".format(i))
+                        failed.append(i)
+                        continue
                 print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1][1]) )
                 if pipe.returncode!=true_outputs[i-1][1]:
                     print("Test {0} failed".format(i))

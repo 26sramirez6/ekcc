@@ -1,0 +1,5 @@
+def int run() {
+	int $a = 5;
+	print $a;
+	return $a;
+}

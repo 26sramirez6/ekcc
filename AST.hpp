@@ -29,6 +29,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Support/CommandLine.h"
 #include "ValidTypes.hpp"
 #include "LLVMGlobals.hpp"
 using std::vector;
@@ -54,6 +55,7 @@ struct ASTNode {
 	static tuple<string, int> recursiveFuncPlaceHolder_;
 	static VarTable varTable_;
 	static bool runDefined_;
+	static llvm::Function * printfFunction_;
 	vector< ASTNode * > children_;
 	unsigned lineNumber_ = 0;
 	ValidType * resultType_ = nullptr;
@@ -126,8 +128,21 @@ struct ASTNode {
 	static void
 	StaticInit(string inputFile) {
 		if (!ASTNode::ready_) {
-			ASTNode::ready_ = true;
+			// construct a print function
 			GlobalModule = new llvm::Module(inputFile, GlobalContext);
+			vector<llvm::Type *> printfCharPtrParam;
+			printfCharPtrParam.push_back(llvm::Type::getInt8PtrTy(GlobalContext));
+			llvm::FunctionType * printFType =
+				llvm::FunctionType::get(
+				llvm::Type::getInt32Ty(GlobalContext),
+				printfCharPtrParam, true);
+
+			ASTNode::printfFunction_ = llvm::Function::Create(
+				printFType, llvm::Function::ExternalLinkage,
+				llvm::Twine("printf"),
+				GlobalModule);
+
+			ASTNode::ready_ = true;
 		}
 	}
 
@@ -171,11 +186,43 @@ struct ProgramNode : public ASTNode {
 		}
 	}
 
-	 void
-	 GenerateCodeRecursive(llvm::raw_string_ostream& ss) {
-	 	ASTNode::GenerateCode(nullptr);
-	 	GlobalModule->print(ss, nullptr);
-	 }
+	void
+	GenerateMainFunction(){
+//		llvm::Type * llvmRetType = ValidType::ConvertVariableTypeToLLVMType(IntVarType);
+//		vector<llvm::Type *> llvmParamTypes{ValidType::ConvertVariableTypeToLLVMType(IntVarType)};
+//
+//		llvm::Function * ret = llvm::Function::Create(
+//			functionType, llvm::Function::ExternalLinkage,
+//			"main", GlobalModule);
+//
+//		IntType vtype;
+//		// create a new basic block to start insertion into
+//		llvm::BasicBlock * entryBlock = llvm::BasicBlock::Create(GlobalContext, "entry", ret);
+//		llvm::BasicBlock * endBlock = llvm::BasicBlock::Create(GlobalContext, "exit", ret);
+//		GlobalBuilder.SetInsertPoint(entryBlock);
+//		llvm::AllocaInst * alloca = vtype.CreateEntryBlockAlloca(ret, "argc");
+//		GlobalBuilder.CreateStore(&ret->args()[0], alloca);
+//
+//		llvm::BasicBlock * middleBlock = (llvm::BasicBlock *)
+//				this->blockNode_->GenerateCode(endBlock);
+//
+//		GlobalBuilder.SetInsertPoint(entryBlock);
+//		GlobalBuilder.CreateBr(middleBlock);
+//		GlobalBuilder.SetInsertPoint(endBlock);
+//
+//		llvm::verifyFunction(*ret);
+//
+//		// now put it in func table
+//		get<1>(ASTNode::funcTable_[this->identifier_]) = ret;
+//
+//		return ret;
+	}
+
+	void
+	GenerateCodeRecursive(llvm::raw_string_ostream& ss) {
+	ASTNode::GenerateCode(nullptr);
+	GlobalModule->print(ss, nullptr);
+	}
 
 	string
 	GetCompilerErrors() {
@@ -251,39 +298,16 @@ struct VdeclNode : public ASTNode {
 		llvm::AllocaInst * allocaInst = nullptr;
 		switch (this->type_->varType_) {
 		case IntVarType:
-			allocaInst = CreateEntryBlockAlloca_int(
+			allocaInst = CreateEntryBlockAllocaInt(
 					parentFunction, this->identifier_);
 			break;
 		case FloatVarType:
-			allocaInst = CreateEntryBlockAlloca_float(
+			allocaInst = CreateEntryBlockAllocaFloat(
 					parentFunction, this->identifier_);
 			break;
 		case BooleanVarType:
-			allocaInst = CreateEntryBlockAlloca_bool(
+			allocaInst = CreateEntryBlockAllocaBool(
 					parentFunction, this->identifier_);
-			break;
-		case RefVarType:
-		{
-//			RefType * refType = (RefType *) this->type_;
-//			switch (refType->referredType_->varType_) {
-//			case IntVarType:
-//				allocaInst = CreateEntryBlockAlloca_intPtr(
-//						parentFunction, this->identifier_);
-//				break;
-//			case FloatVarType:
-//				allocaInst = CreateEntryBlockAlloca_floatPtr(
-//						parentFunction, this->identifier_);
-//				break;
-//			case BooleanVarType:
-//				allocaInst = CreateEntryBlockAlloca_boolPtr(
-//						parentFunction, this->identifier_);
-//				break;
-//			default:
-//				cout << "unhandled case in vdeclnode" << endl;
-//				break;
-//			}
-//			allocaInst = get<1>(ASTNode::varTable_["x"]);
-		}
 			break;
 		default:
 			cout << "unhandled case in vdeclnode" << endl;
@@ -383,16 +407,6 @@ struct ExistingFuncNode: public ASTNode {
 		ss << left1 << "name: funccall" << '\n';
 		ss << left1 << "globid: " << this->identifier_ << '\n';
 	}
-
-//	virtual llvm::Value *
-//	GetLLVMReturnValue(string identifier) {
-//		llvm::Value * ret = nullptr;
-//		VarTableEntry hit = ASTNode::varTable_.find(identifier);
-//		if (ASTNode::varTable_.end() != hit) {
-//			ret = get<1>(hit->second);
-//		}
-//		return ret;
-//	}
 
 	llvm::Value *
 	GenerateCode(llvm::BasicBlock * endBlock) {
@@ -1355,6 +1369,7 @@ struct StatementNode: public ASTNode {
 			ASTNode(lineNumber),
 			function_(printFunction),
 			stmtName_("printstmt"),
+			exprNode_(expressionNode),
 			constructorCase_(8) {
 		this->children_.push_back(expressionNode);
 	}
@@ -1422,8 +1437,10 @@ struct StatementNode: public ASTNode {
 	llvm::Value *
 	GenerateCode(llvm::BasicBlock * endBlock) {
 		llvm::Function * parentFunction = GlobalBuilder.GetInsertBlock()->getParent();
-		llvm::BasicBlock * startBlock = llvm::BasicBlock::Create(GlobalContext, "stmt_entry", parentFunction, nullptr);
-		llvm::BasicBlock * endOfMiddleBlock = llvm::BasicBlock::Create(GlobalContext, "stmt_exit", parentFunction, nullptr);
+		llvm::BasicBlock * startBlock = llvm::BasicBlock::Create(
+				GlobalContext, "stmt_entry", parentFunction, nullptr);
+		llvm::BasicBlock * endOfMiddleBlock = llvm::BasicBlock::Create(
+				GlobalContext, "stmt_exit", parentFunction, nullptr);
 		GlobalBuilder.SetInsertPoint(startBlock);
 
 		switch (this->constructorCase_) {
@@ -1523,7 +1540,32 @@ struct StatementNode: public ASTNode {
 			GlobalBuilder.CreateCondBr(condValue, ifStmtBlock, elseStmtBlock);
 		}
 			break;
+		case 8:
+		{
+			vector<llvm::Value *> printfParams;
+			llvm::Constant * formatStr = nullptr;
+			switch (ValidType::GetUnderlyingType(this->exprNode_->resultType_)->varType_) {
+			case IntVarType:
+			case CintVarType:
+			case BooleanVarType:
+				formatStr = PrintFunction::Geti8LLVMValueFromStr("%d\n");
+				break;
+			case FloatVarType:
+				formatStr = PrintFunction::Geti8LLVMValueFromStr("%f\n");
+				break;
+			default:
+				cout << "unhandled case in statement GenerateNode" << endl;
+				break;
+			}
 
+			printfParams.push_back(formatStr);
+			printfParams.push_back(this->exprNode_->GenerateCode(endOfMiddleBlock));
+
+			GlobalBuilder.CreateCall(ASTNode::printfFunction_, printfParams, "printfCall");
+			GlobalBuilder.SetInsertPoint(startBlock);
+			GlobalBuilder.CreateBr(endOfMiddleBlock);
+		}
+			break;
 		default:
 			cout << "unhandled case in statement generate code" << endl;
 			break;
@@ -1558,20 +1600,6 @@ struct StatementsNode: public ASTNode {
 	GenerateCode(llvm::BasicBlock * endBlock3) {
 		llvm::Function * parentfunction = GlobalBuilder.GetInsertBlock()->getParent();
 		llvm::BasicBlock * startBlock = llvm::BasicBlock::Create(GlobalContext, "stmts_entry", parentfunction, nullptr);
-//		vector<llvm::BasicBlock *> statementBlocks;
-//		for (int i=0; i<this->children_.size(); ++i) {
-//			llvm::BasicBlock * statementBlock = (llvm::BasicBlock *)
-//				this->children_[i]->GenerateCode(endBlock);
-//			statementBlocks.push_back(statementBlock);
-//		}
-//
-//		for (int i=0; i<this->children_.size()-1; ++i) {
-//			GlobalBuilder.SetInsertPoint(statementBlocks[i]);
-//			GlobalBuilder.CreateBr(statementBlocks[i+1]);
-//		}
-//		GlobalBuilder.SetInsertPoint(ret);
-//		GlobalBuilder.CreateBr(statementBlocks[0]);
-
 
 
 		llvm::BasicBlock * endOfMiddleBlock = startBlock;

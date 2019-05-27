@@ -16,6 +16,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/IR/GlobalVariable.h"
 
 #include "LLVMGlobals.hpp"
 
@@ -124,16 +125,6 @@ struct ValidType {
 		llvm::IRBuilder<> temp(&function->getEntryBlock(),
 			function->getEntryBlock().begin());
 		return temp.CreateAlloca(this->GetLLVMType(), nullptr, varName);
-//		switch (this->varType_) {
-//		case EmptyVarType: return nullptr;
-//		case IntVarType: return temp.CreateAlloca(llvm::Type::getInt32Ty(GlobalContext), nullptr, varName);
-//		case CintVarType: return temp.CreateAlloca(llvm::Type::getInt32Ty(GlobalContext), nullptr, varName);
-//		case StringVarType: return nullptr;
-//		case FloatVarType: return temp.CreateAlloca(llvm::Type::getFloatTy(GlobalContext), nullptr, varName);
-//		case BooleanVarType: return temp.CreateAlloca(llvm::Type::getInt1Ty(GlobalContext), nullptr, varName);
-//		case RefVarType: return temp.CreateAlloca(this->GetLLVMType(), nullptr, varName);
-//		case VoidVarType: return nullptr;
-//		}
 		return nullptr;
 	}
 
@@ -404,7 +395,32 @@ struct Literal {
 };
 
 struct Function {};
-struct PrintFunction : Function {};
+struct PrintFunction : Function {
+	// Borrowed from link below with a little massage
+	// https://github.com/HongxuChen/snippets_llvm/blob/master/include/LLUtils.hh
+	static llvm::Constant *
+	Geti8LLVMValueFromStr(char const * formatStr) {
+		llvm::Constant * formatStrConstant =
+			llvm::ConstantDataArray::getString(GlobalContext, formatStr);
+
+		llvm::GlobalVariable * formatStrGV =
+		  new llvm::GlobalVariable(*GlobalModule,
+				 formatStrConstant->getType(), true,
+				 llvm::GlobalValue::InternalLinkage,
+				 formatStrConstant);
+
+		llvm::Constant * zero = llvm::Constant::getNullValue(
+				llvm::IntegerType::getInt32Ty(GlobalContext));
+
+		llvm::Constant * indices[] = {zero, zero};
+		llvm::Constant * strVal = llvm::ConstantExpr::
+				getGetElementPtr(formatStrConstant->getType(),
+						formatStrGV, indices, true);
+
+		return strVal;
+	}
+};
+
 struct RunFunction : Function {};
 struct DefFunction : Function {};
 struct ExternFunction : Function {};
