@@ -701,6 +701,7 @@ struct BinaryOperationNode: public ASTNode {
 		switch (this->operationType_) {
 		case Assign:
 		{
+			cout << "assign here" << endl;
 			R = this->children_[1]->GenerateCode(endBlock);
 			ExistingVarNode * existingNode = (ExistingVarNode *)this->children_[0];
 			llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[existingNode->identifier_]);
@@ -710,6 +711,7 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case Cast:
 		{
+			cout << "cast here" << endl;
 			R = this->children_[0]->GenerateCode(endBlock);
 			llvm::Type * castTo = ValidType::ConvertVariableTypeToLLVMType(
 					this->resultType_->varType_);
