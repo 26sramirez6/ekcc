@@ -11,6 +11,7 @@
     #include "ValidTypes.hpp"
     #include "AST.hpp"
     #include "Parser.hpp"
+    #include "llvm/IR/Function.h"
     using namespace std;
     // stuff from flex that bison needs to know about:
     extern "C" {
@@ -36,6 +37,7 @@
     #include "CompilerConfig.hpp"
     #include "ValidTypes.hpp"
     #include "AST.hpp"
+    #include "llvm/IR/Function.h"
 }
 
 %union{
@@ -305,10 +307,14 @@ vector<string> ASTNode::compilerErrors_;
 vector<int> ASTNode::lineNumberErrors_;
 VarTable ASTNode::varTable_;
 FuncTable ASTNode::funcTable_;
-tuple<string, int> ASTNode::recursiveFuncPlaceHolder_ = 
-		make_tuple("", -1);
+tuple<string, int> ASTNode::recursiveFuncPlaceHolder_ = make_tuple("", -1);
 bool ASTNode::runDefined_ = false;
-
+llvm::Function * ASTNode::printfFunction_ = nullptr;
+llvm::Function * ASTNode::cintAddFunction_ = nullptr;
+llvm::Function * ASTNode::cintMultiplyFunction_ = nullptr;
+llvm::Function * ASTNode::cintSubtractFunction_ = nullptr;
+llvm::Function * ASTNode::cintDivideFunction_ = nullptr;
+llvm::Function * ASTNode::cintNegateFunction_ = nullptr;
 // static assert that CLANG_BINARY defined
 #define Q(x) #x
 #define QUOTE(x) Q(x)
@@ -370,6 +376,11 @@ main(int argc, char ** argv) {
 	string stringIR("");
 	llvm::raw_string_ostream ssIR(stringIR);
 	root->GenerateCodeRecursive(ssIR);
+	
+	if (cfg.optimize_) {
+		root->AddOptimizations();
+	}
+	
 	if (cfg.emitLLVM_) {
 		cout << ssIR.str() << endl;
 	}
@@ -384,17 +395,19 @@ main(int argc, char ** argv) {
 			cerr << "error: fork failed\n";
 			return 1;
 		} else if (rv==0) { //child
-			const char * args[5];
+			const char * args[6];
 			args[0] = strdup(QUOTED_CLANG_BINARY);
 			args[1] = (cfg.outputFile_ + ".ll").c_str();
-			args[2] = strdup("-o");
-			args[3] = cfg.outputFile_.c_str();
-			args[4] = NULL;
-			cout << "child executing: " <<
-				args[0] << " " <<
-				args[1] << " " <<
-				args[2] << " " <<
-				args[3] << endl;
+			args[2] = "main.ll";
+			args[3] = strdup("-o");
+			args[4] = cfg.outputFile_.c_str();
+			args[5] = NULL;
+//			cout << "child executing: " <<
+//				args[0] << " " <<
+//				args[1] << " " <<
+//				args[2] << " " <<
+//				args[3] << " " <<
+//				args[4] << endl;
 			execvp((const char *)args[0], (char* const*)args);
 		} else { // parent
 			wait(NULL);

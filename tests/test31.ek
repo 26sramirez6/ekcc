@@ -1,0 +1,5 @@
+extern int arg(int);
+
+def int run() {
+    return arg(0);
+}

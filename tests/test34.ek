@@ -1,0 +1,7 @@
+# error, subtraction overflow
+def int run() {
+	cint $x = -2147483646;
+	cint $y = 300;
+	cint $z = $x - $y;
+	return 0;
+}

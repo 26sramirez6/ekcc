@@ -26,8 +26,11 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm-c/Types.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
+#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/CommandLine.h"
 #include "ValidTypes.hpp"
@@ -56,6 +59,11 @@ struct ASTNode {
 	static VarTable varTable_;
 	static bool runDefined_;
 	static llvm::Function * printfFunction_;
+	static llvm::Function * cintAddFunction_;
+	static llvm::Function * cintMultiplyFunction_;
+	static llvm::Function * cintDivideFunction_;
+	static llvm::Function * cintSubtractFunction_;
+	static llvm::Function * cintNegateFunction_;
 	vector< ASTNode * > children_;
 	unsigned lineNumber_ = 0;
 	ValidType * resultType_ = nullptr;
@@ -128,8 +136,9 @@ struct ASTNode {
 	static void
 	StaticInit(string inputFile) {
 		if (!ASTNode::ready_) {
-			// construct a print function
+			// construct global module
 			GlobalModule = new llvm::Module(inputFile, GlobalContext);
+			// construct a print function
 			vector<llvm::Type *> printfCharPtrParam;
 			printfCharPtrParam.push_back(llvm::Type::getInt8PtrTy(GlobalContext));
 			llvm::FunctionType * printFType =
@@ -140,6 +149,46 @@ struct ASTNode {
 			ASTNode::printfFunction_ = llvm::Function::Create(
 				printFType, llvm::Function::ExternalLinkage,
 				llvm::Twine("printf"),
+				GlobalModule);
+			// construct the cint binary operations
+			vector<llvm::Type *> cintBinaryParams;
+			cintBinaryParams.push_back(llvm::Type::getInt32Ty(GlobalContext));
+			cintBinaryParams.push_back(llvm::Type::getInt32Ty(GlobalContext));
+			llvm::FunctionType * cintBinaryFType =
+				llvm::FunctionType::get(
+				llvm::Type::getInt32Ty(GlobalContext),
+				cintBinaryParams, false);
+
+			ASTNode::cintAddFunction_ = llvm::Function::Create(
+				cintBinaryFType, llvm::Function::ExternalLinkage,
+				llvm::Twine("cint_add"),
+				GlobalModule);
+
+			ASTNode::cintSubtractFunction_ = llvm::Function::Create(
+				cintBinaryFType, llvm::Function::ExternalLinkage,
+				llvm::Twine("cint_subtract"),
+				GlobalModule);
+
+			ASTNode::cintMultiplyFunction_ = llvm::Function::Create(
+				cintBinaryFType, llvm::Function::ExternalLinkage,
+				llvm::Twine("cint_multiply"),
+				GlobalModule);
+
+			ASTNode::cintDivideFunction_ = llvm::Function::Create(
+				cintBinaryFType, llvm::Function::ExternalLinkage,
+				llvm::Twine("cint_divide"),
+				GlobalModule);
+
+			// construct cint unary operations
+			vector<llvm::Type *> cintUnaryParams;
+			cintUnaryParams.push_back(llvm::Type::getInt32Ty(GlobalContext));
+			llvm::FunctionType * cintUnaryFType =
+				llvm::FunctionType::get(
+				llvm::Type::getInt32Ty(GlobalContext),
+				cintUnaryParams, false);
+			ASTNode::cintNegateFunction_ = llvm::Function::Create(
+					cintUnaryFType, llvm::Function::ExternalLinkage,
+				llvm::Twine("cint_negate"),
 				GlobalModule);
 
 			ASTNode::ready_ = true;
@@ -187,41 +236,9 @@ struct ProgramNode : public ASTNode {
 	}
 
 	void
-	GenerateMainFunction(){
-//		llvm::Type * llvmRetType = ValidType::ConvertVariableTypeToLLVMType(IntVarType);
-//		vector<llvm::Type *> llvmParamTypes{ValidType::ConvertVariableTypeToLLVMType(IntVarType)};
-//
-//		llvm::Function * ret = llvm::Function::Create(
-//			functionType, llvm::Function::ExternalLinkage,
-//			"main", GlobalModule);
-//
-//		IntType vtype;
-//		// create a new basic block to start insertion into
-//		llvm::BasicBlock * entryBlock = llvm::BasicBlock::Create(GlobalContext, "entry", ret);
-//		llvm::BasicBlock * endBlock = llvm::BasicBlock::Create(GlobalContext, "exit", ret);
-//		GlobalBuilder.SetInsertPoint(entryBlock);
-//		llvm::AllocaInst * alloca = vtype.CreateEntryBlockAlloca(ret, "argc");
-//		GlobalBuilder.CreateStore(&ret->args()[0], alloca);
-//
-//		llvm::BasicBlock * middleBlock = (llvm::BasicBlock *)
-//				this->blockNode_->GenerateCode(endBlock);
-//
-//		GlobalBuilder.SetInsertPoint(entryBlock);
-//		GlobalBuilder.CreateBr(middleBlock);
-//		GlobalBuilder.SetInsertPoint(endBlock);
-//
-//		llvm::verifyFunction(*ret);
-//
-//		// now put it in func table
-//		get<1>(ASTNode::funcTable_[this->identifier_]) = ret;
-//
-//		return ret;
-	}
-
-	void
 	GenerateCodeRecursive(llvm::raw_string_ostream& ss) {
-	ASTNode::GenerateCode(nullptr);
-	GlobalModule->print(ss, nullptr);
+		ASTNode::GenerateCode(nullptr);
+		GlobalModule->print(ss, nullptr);
 	}
 
 	string
@@ -236,6 +253,41 @@ struct ProgramNode : public ASTNode {
 	bool
 	HasCompilerErrors() {
 		return ASTNode::compilerErrors_.size() > 0;
+	}
+
+	void
+	AddOptimizations() {
+		// sets up optimizations if needed
+//		llvm::LLVMPassManagerBuilderRef passBuilder;
+//
+//		passBuilder = llvm::LLVMPassManagerBuilderCreate();
+//		llvm::LLVMPassManagerBuilderSetOptLevel(passBuilder, 3);
+//		llvm::LLVMPassManagerBuilderSetSizeLevel(passBuilder, 0);
+//
+//		llvm::LLVMPassManagerRef functionPasses =
+//			llvm::LLVMCreateFunctionPassManagerForModule(GlobalModule);
+//		llvm::LLVMPassManagerRef modulePasses =
+//			llvm::LLVMCreatePassManager();
+//
+//		llvm::LLVMPassManagerBuilderPopulateFunctionPassManager(
+//				passBuilder, functionPasses);
+//		llvm::LLVMPassManagerBuilderPopulateModulePassManager(
+//				passBuilder, modulePasses);
+//
+//		llvm::LLVMPassManagerBuilderDispose(passBuilder);
+//
+//		llvm::LLVMInitializeFunctionPassManager(functionPasses);
+//		for (llvm::LLVMValueRef value = llvm::LLVMGetFirstFunction(GlobalModule);
+//			 value; value = llvm::LLVMGetNextFunction(value)) {
+//			llvm::LLVMRunFunctionPassManager(functionPasses, value);
+//		}
+//
+//		llvm::LLVMFinalizeFunctionPassManager(functionPasses);
+//
+//		llvm::LLVMRunPassManager(modulePasses, GlobalModule);
+//
+//		llvm::LLVMDisposePassManager(functionPasses);
+//		llvm::LLVMDisposePassManager(modulePasses);
 	}
 };
 
@@ -307,6 +359,10 @@ struct VdeclNode : public ASTNode {
 			break;
 		case BooleanVarType:
 			allocaInst = CreateEntryBlockAllocaBool(
+					parentFunction, this->identifier_);
+			break;
+		case CintVarType:
+			allocaInst = CreateEntryBlockAllocaInt(
 					parentFunction, this->identifier_);
 			break;
 		default:
@@ -456,6 +512,7 @@ struct TdeclsNode : public ASTNode {
 
 struct ExternNode : public ASTNode {
 	ValidType * retType_ = nullptr;
+	TdeclsNode * tdeclsNode_ = nullptr;
 	string identifier_;
 
 	ExternNode(unsigned lineNumber,
@@ -469,7 +526,8 @@ struct ExternNode : public ASTNode {
 			ValidType * retType,
 			string identifier,
 			TdeclsNode * tdeclsNode) :
-			ASTNode(lineNumber), retType_(retType), identifier_(identifier) {
+			ASTNode(lineNumber), retType_(retType),
+			tdeclsNode_(tdeclsNode), identifier_(identifier) {
 		this->Validate(lineNumber,
 			retType, identifier);
 		this->children_.push_back(tdeclsNode);
@@ -478,33 +536,68 @@ struct ExternNode : public ASTNode {
 	void
 	Validate(unsigned lineNumber,
 			ValidType * retType, string identifier) {
-		if(retType->varType_== RefVarType){
-			stringstream ss;
-			ss << "error: line " << lineNumber << ": ";
-			ss << "function return type can't be ref. \n";
-			ASTNode::compilerErrors_.push_back(ss.str());
+		if(retType->varType_== RefVarType) {
+			ASTNode::LogError(lineNumber,
+				string("function return type can't be ref. \n"));
 		}
 
 		vector< ValidType * > vTypes;
 		vTypes.push_back(retType);
+		if (this->tdeclsNode_!=nullptr) {
+			for (auto t : this->tdeclsNode_->paramTypes_) {
+				vTypes.push_back(t);
+			}
+		}
 
 		FuncTableEntry hit = ASTNode::funcTable_.find(identifier);
 		if (hit != ASTNode::funcTable_.end()) {
-			stringstream ss;
-			ss << "error: line " << lineNumber << ": ";
-			ss << "function identifier '";
-			ss << identifier;
-			ss << "' already defined. \n";
-			ASTNode::compilerErrors_.push_back(ss.str());
+			ASTNode::LogError(lineNumber,
+				string("function identifer ") +
+				identifier + string("already defined\n"));
 		}
 
+		if (!(identifier=="arg" || identifier=="argf")) {
+			ASTNode::LogError(lineNumber,
+				"invalid extern function");
+		}
+
+
+		llvm::Type * getArgReturnType = nullptr;
+		if (identifier=="arg") {
+			getArgReturnType = llvm::Type::getInt32Ty(GlobalContext);
+
+		} else if (identifier=="argf") {
+			getArgReturnType = llvm::Type::getFloatTy(GlobalContext);
+		} else {
+			ASTNode::LogError(lineNumber, "invalid extern function");
+			exit(1);
+		}
+
+		vector<llvm::Type *> getArgParam { llvm::Type::getInt32Ty(GlobalContext) };
+
+		llvm::FunctionType * getArgFuncType =
+			llvm::FunctionType::get(
+			getArgReturnType,
+			getArgParam, false);
+
+		llvm::Function * getArgFunc = llvm::Function::Create(
+				getArgFuncType, llvm::Function::ExternalLinkage,
+				llvm::Twine(identifier),
+				GlobalModule);
+
+
 		get<0>(ASTNode::funcTable_[identifier]) = vTypes;
+		get<1>(ASTNode::funcTable_[identifier]) = getArgFunc;
 	}
 
 	virtual ~ExternNode() {
 		if (this->retType_ != nullptr) {
 			delete this->retType_;
 			this->retType_ = nullptr;
+		}
+		if (this->tdeclsNode_ != nullptr) {
+			delete this->tdeclsNode_;
+			this->tdeclsNode_ = nullptr;
 		}
 	}
 
@@ -593,6 +686,42 @@ struct UnaryOperationNode: public ASTNode {
 #endif
 		}
 		this->children_[0]->PrintRecursive(ss, depth+1);
+	}
+
+	llvm::Value *
+	GenerateCode(llvm::BasicBlock * endBlock) {
+		llvm::Value * ret = nullptr;
+		llvm::Value * R = this->children_[0]->GenerateCode(endBlock);
+		string error = "invalid unary operation in GenerateCode";
+		this->resultType_ = ValidType::GetUnderlyingType(
+			this->children_[0]->resultType_);
+
+		switch (this->operationType_) {
+		case Not:
+			if (this->resultType_->varType_==BooleanVarType) {
+				return GlobalBuilder.CreateNot(R, "not");
+			} else {
+				cout << error << endl;
+				exit(1);
+			}
+			break;
+		case Minus:
+			switch (this->resultType_->varType_) {
+			case IntVarType:
+			case FloatVarType:
+				return GlobalBuilder.CreateNeg(R, "negate");
+			case CintVarType:
+			{
+				vector<llvm::Value *> params { R };
+				return GlobalBuilder.CreateCall(
+					ASTNode::cintNegateFunction_, params, "cint_negate");
+			}
+			default:
+				cout << error << endl;
+				exit(1);
+			}
+		}
+
 	}
 };
 
@@ -697,11 +826,9 @@ struct BinaryOperationNode: public ASTNode {
 		llvm::Value * L = nullptr;
 		llvm::Value * R = nullptr;
 		string error = "invalid binary operation in GenerateCode";
-
 		switch (this->operationType_) {
 		case Assign:
 		{
-			cout << "assign here" << endl;
 			R = this->children_[1]->GenerateCode(endBlock);
 			ExistingVarNode * existingNode = (ExistingVarNode *)this->children_[0];
 			llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[existingNode->identifier_]);
@@ -711,7 +838,6 @@ struct BinaryOperationNode: public ASTNode {
 			break;
 		case Cast:
 		{
-			cout << "cast here" << endl;
 			R = this->children_[0]->GenerateCode(endBlock);
 			llvm::Type * castTo = ValidType::ConvertVariableTypeToLLVMType(
 					this->resultType_->varType_);
@@ -739,7 +865,11 @@ struct BinaryOperationNode: public ASTNode {
 			case IntVarType:
 				return GlobalBuilder.CreateNSWMul(L, R, "mul_int");
 			case CintVarType:
-				return GlobalBuilder.CreateNSWMul(L, R, "mul_cint");
+			{
+				vector<llvm::Value *> params { L, R };
+				return GlobalBuilder.CreateCall(
+					ASTNode::cintMultiplyFunction_, params, "cint_multiply");
+			}
 			default:
 				cout << error << endl;
 				exit(1);
@@ -757,7 +887,11 @@ struct BinaryOperationNode: public ASTNode {
 			case IntVarType:
 				return GlobalBuilder.CreateSDiv(L, R, "div_int");
 			case CintVarType:
-				return GlobalBuilder.CreateSDiv(L, R, "div_cint");
+			{
+				vector<llvm::Value *> params { L, R };
+				return GlobalBuilder.CreateCall(
+					ASTNode::cintDivideFunction_, params, "cint_divide");
+			}
 			default:
 				cout << error << endl;
 				exit(1);
@@ -775,7 +909,11 @@ struct BinaryOperationNode: public ASTNode {
 			case IntVarType:
 				return GlobalBuilder.CreateNSWAdd(L, R, "add_int");
 			case CintVarType:
-				return GlobalBuilder.CreateNSWAdd(L, R, "add_cint");
+			{
+				vector<llvm::Value *> params { L, R };
+				return GlobalBuilder.CreateCall(
+					ASTNode::cintAddFunction_, params, "cint_add");
+			}
 			default:
 				cout << error << endl;
 				exit(1);
@@ -793,7 +931,11 @@ struct BinaryOperationNode: public ASTNode {
 			case IntVarType:
 				return GlobalBuilder.CreateNSWSub(L, R, "sub_int");
 			case CintVarType:
-				return GlobalBuilder.CreateNSWSub(L, R, "sub_cint");
+			{
+				vector<llvm::Value *> params { L, R };
+				return GlobalBuilder.CreateCall(
+					ASTNode::cintSubtractFunction_, params, "cint_subtract");
+			}
 			default:
 				cout << error << endl;
 				exit(1);
@@ -1177,7 +1319,6 @@ struct ExpressionNode: public ASTNode {
 			vector<llvm::Value *> llvmFunctionParams;
 			vector<ValidType *> funcParams =
 				get<0>(ASTNode::funcTable_[existingFuncNode->identifier_]);
-
 			for (int i=1; i<this->children_.size(); ++i) {
 				if (funcParams[i]->varType_==RefVarType) {
 					ExistingVarNode * existingVar = (ExistingVarNode*) (this->children_[i]->children_[0]);
@@ -1207,6 +1348,9 @@ struct ExpressionNode: public ASTNode {
 						llvmFunctionParams, "existing_func_call");
 			}
 		}
+			break;
+		default:
+			cout << "unhandled GenerateCode() in ExpressionNode" << endl;
 			break;
 		}
 
@@ -1551,18 +1695,47 @@ struct StatementNode: public ASTNode {
 			case CintVarType:
 			case BooleanVarType:
 				formatStr = PrintFunction::Geti8LLVMValueFromStr("%d\n");
+				printfParams.push_back(formatStr);
+				printfParams.push_back(this->exprNode_->GenerateCode(endOfMiddleBlock));
 				break;
 			case FloatVarType:
+			{
 				formatStr = PrintFunction::Geti8LLVMValueFromStr("%f\n");
+				printfParams.push_back(formatStr);
+				llvm::Value * floatInst = this->exprNode_->GenerateCode(endOfMiddleBlock);
+				llvm::AllocaInst * doubleInstAlloca = GlobalBuilder.CreateAlloca(
+						llvm::Type::getDoubleTy(GlobalContext), nullptr, "floatToDouble");
+				llvm::Value * floatExtendedInst = GlobalBuilder.CreateFPCast(
+						floatInst, llvm::Type::getDoubleTy(GlobalContext),
+						llvm::Twine("floatToDouble"));
+				GlobalBuilder.CreateStore(floatExtendedInst, doubleInstAlloca);
+				llvm::LoadInst * doubleInstLoad = GlobalBuilder.CreateLoad(
+						doubleInstAlloca, "floatToDouble");
+				printfParams.push_back(doubleInstLoad);
+			}
 				break;
 			default:
 				cout << "unhandled case in statement GenerateNode" << endl;
 				break;
 			}
 
-			printfParams.push_back(formatStr);
-			printfParams.push_back(this->exprNode_->GenerateCode(endOfMiddleBlock));
+			GlobalBuilder.CreateCall(ASTNode::printfFunction_, printfParams, "printfCall");
+			GlobalBuilder.SetInsertPoint(startBlock);
+			GlobalBuilder.CreateBr(endOfMiddleBlock);
+		}
+			break;
+		case 9:
+		{
+			vector<llvm::Value *> printfParams;
+			llvm::Constant * formatStr = PrintFunction::Geti8LLVMValueFromStr("%s\n");
+			this->printStringLiteral_.erase(
+				remove(this->printStringLiteral_.begin(),
+					   this->printStringLiteral_.end(), '"'),
+			    this->printStringLiteral_.end());
 
+			llvm::Constant * llvmStr = PrintFunction::Geti8LLVMValueFromStr(
+				(this->printStringLiteral_ + "\n").c_str());
+			printfParams.push_back(llvmStr);
 			GlobalBuilder.CreateCall(ASTNode::printfFunction_, printfParams, "printfCall");
 			GlobalBuilder.SetInsertPoint(startBlock);
 			GlobalBuilder.CreateBr(endOfMiddleBlock);
@@ -1777,13 +1950,9 @@ struct FuncNode : public ASTNode {
 			functionType = llvm::FunctionType::get(llvmRetType, this->llvmParamTypes_, false);
 		}
 
-		string name = this->identifier_;
-		if (this->isRunFunc_) {
-			name = "main";
-		}
 		llvm::Function * ret = llvm::Function::Create(
 			functionType, llvm::Function::ExternalLinkage,
-			name, GlobalModule);
+			this->identifier_, GlobalModule);
 
 		// create a new basic block to start insertion into
 		llvm::BasicBlock * entryBlock = llvm::BasicBlock::Create(GlobalContext, "entry", ret);

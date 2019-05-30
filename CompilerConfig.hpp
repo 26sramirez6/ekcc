@@ -34,6 +34,8 @@ struct CompilerConfig {
 				this->emitAST_ = true;
 			} else if (!strcmp(argv[i], "-emit-llvm")) {
 				this->emitLLVM_ = true;
+			} else if (!strcmp(argv[i], "-O")) {
+				this->optimize_ = true;
 			} else if (!strcmp(argv[i], "-o")) {
 				this->outputFile_ = string(argv[i+1]);
 				outputFileSet = true;

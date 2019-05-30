@@ -1,0 +1,7 @@
+# error, division overflow
+def int run() {
+	cint $x = -2147483648;
+	cint $y = -1;
+	cint $z = $x/$y;
+	return 0;
+}

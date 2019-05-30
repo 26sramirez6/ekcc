@@ -1,0 +1,6 @@
+# error, negation overflow
+def int run() {
+	cint $x = -2147483648;
+	cint $y = -$x;
+	return 0;
+}

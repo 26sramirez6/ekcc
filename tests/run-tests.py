@@ -19,7 +19,8 @@ true_outputs = [
 1, #test 10 
 1, #test 11
 1, #test 12
-# llvm tests below
+
+# llvm basic tests
 (0,4), #test 13
 (0,9), #test 14
 (0,18),#test 15
@@ -34,10 +35,23 @@ true_outputs = [
 (0,19), #test 24
 (0,25), #test 25
 (0,10), #test 26
-# print tests below
+
+# print tests
 (0,5,"5\n"), #test 27 
 (0,5,"5\n"), #test 28
-(0,0,"10\n"), #test 28
+(0,0,"8.500000\n"), #test 29
+(0,0,"hello world\n"), #test 30
+
+# arg/argf tests
+(0, 5, "5"), #test 31
+(0, 0, "1.2"), #test 32
+
+# cint over flow tests
+(0, 1), # test 33
+(0, 1), # test 34
+(0, 1), # test 35
+(0, 1), # test 36
+(0, 1), # test 37
 ]
 total_passed = 0
 failed = []
@@ -65,6 +79,7 @@ for i in range(1,len(true_outputs)+1):
                       "./out/test{0}".format(i), 
                       "./tests/test{0}.ek".format(i)], 
                       stdout=PIPE)
+                      
         test_output = pipe.communicate()[0].decode("utf-8")
         print(test_output)
         print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1][0]) )
@@ -75,9 +90,14 @@ for i in range(1,len(true_outputs)+1):
         else:
             # now run it
             if os.path.isfile("./out/test{0}".format(i)):
-                pipe = Popen(["./out/test{0}".format(i)], stdout=PIPE)
+                if i==31 or i==32:
+                    pipe = Popen(["./out/test{0}".format(i), 
+                                  true_outputs[i-1][2]],
+                                  stdout=PIPE)
+                else:
+                    pipe = Popen(["./out/test{0}".format(i)], stdout=PIPE)
                 test_output = pipe.communicate()[0].decode("utf-8")
-                if i>26: 
+                if 26<i<31: 
                     print(test_output)
                     if test_output!=true_outputs[i-1][2]:
                         print("Test {0} failed".format(i))

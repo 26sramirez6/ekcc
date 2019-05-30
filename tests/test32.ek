@@ -1,0 +1,9 @@
+extern float argf(int);
+
+def int run() {
+    float $x = argf(0);
+    if ($x==1.2) {
+        return 0;
+    }
+    return 1;
+}

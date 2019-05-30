@@ -7,13 +7,10 @@ LLVM_ROOT=/home/sramirez266/clang+llvm-7.0.0-x86_64-linux-gnu-ubuntu-16.04
 COMPILE_CMD=$(LLVM_ROOT)/bin/$(CC)
 LLVM_CONFIG_CMD=`$(LLVM_ROOT)/bin/llvm-config $(LLVM_CONFIG)`
 
-all: clean ekcc
+all: clean main.ll ekcc
 
-test: clean ekcc
+test: clean main.ll ekcc
 	@python3 ./tests/run-tests.py
-
-test11: clean ekcc
-	./ekcc -emit-llvm ./tests/test11.ek -o test11
 
 valgrind: clean ekcc 
 	valgrind --leak-check=full --track-origins=yes --log-file="valgrind.out" --show-reachable=yes -v ./ekcc
@@ -35,7 +32,10 @@ Parser.cpp: Parser.y Lexer.cpp ValidTypes.hpp AST.hpp CompilerConfig.hpp LLVMGlo
 
 Parser.hpp: Parser.cpp
 	noop
-	
+
+main.ll: main.c
+	$(LLVM_ROOT)/bin/clang -O0 -S -emit-llvm $< -o $@ 
+
 clean:
-	rm -f *.o *~ Lexer.cpp Lexer.hpp Parser.cpp Parser.hpp ekcc
+	rm -f *.o *~ Lexer.cpp Lexer.hpp Parser.cpp Parser.hpp main.ll ekcc
 	rm -r -f out
