@@ -26,7 +26,46 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+
+#include <llvm/ADT/Triple.h>
+#include <llvm/Analysis/CallGraph.h>
+#include <llvm/Analysis/CallGraphSCCPass.h>
+#include <llvm/Analysis/LoopPass.h>
+#include <llvm/Analysis/RegionPass.h>
+#include <llvm/Analysis/TargetLibraryInfo.h>
+#include <llvm/Analysis/TargetTransformInfo.h>
+#include <llvm/Bitcode/BitcodeWriterPass.h>
+#include <llvm/CodeGen/TargetPassConfig.h>
+#include <llvm/Config/llvm-config.h>
+#include <llvm/IR/DataLayout.h>
+#include <llvm/IR/DebugInfo.h>
+#include <llvm/IR/IRPrintingPasses.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/LegacyPassNameParser.h>
+#include <llvm/IRReader/IRReader.h>
+#include <llvm/InitializePasses.h>
+#include <llvm/MC/SubtargetFeature.h>
+#include <llvm/Support/Debug.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/Host.h>
+#include <llvm/Support/InitLLVM.h>
+
+// #include <llvm/Support/PluginLoader.h>
+//CommandLine Error: Option 'load' registered more than once!
+//LLVM ERROR: inconsistency in registered CommandLine options
+
+#include <llvm/Support/SourceMgr.h>
+#include <llvm/Support/SystemUtils.h>
+#include <llvm/Support/TargetRegistry.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/ToolOutputFile.h>
+#include <llvm/Support/YAMLTraits.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Transforms/Coroutines.h>
+#include <llvm/Transforms/IPO.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/Utils/Cloning.h>
+
 #include "llvm-c/Types.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
@@ -136,8 +175,34 @@ struct ASTNode {
 	static void
 	StaticInit(string inputFile) {
 		if (!ASTNode::ready_) {
+			// Set up for JIT
+			std::string HostTriple(llvm::sys::getProcessTriple());
+			std::string CPU = llvm::sys::getHostCPUName();
+
+			llvm::StringMap<bool> HostFeatures;
+			std::string FeaturesStr;
+			if (llvm::sys::getHostCPUFeatures(HostFeatures)) {
+				llvm::SubtargetFeatures Features;
+
+				for (auto &F : HostFeatures)
+				Features.AddFeature(F.first(), F.second);
+
+				FeaturesStr = Features.getString();
+			}
+
 			// construct global module
 			GlobalModule = new llvm::Module(inputFile, GlobalContext);
+
+			// Note: If you're using the JIT, you'll get the TM from the JIT engine...
+			std::string Err;
+			const llvm::Target* Target = llvm::TargetRegistry::lookupTarget (HostTriple, Err);
+			std::unique_ptr<llvm::TargetMachine> TM(Target->createTargetMachine(HostTriple, CPU, FeaturesStr,
+																			llvm::TargetOptions(), llvm::Reloc::PIC_));
+
+			GlobalTargetMachine = move(TM);
+			GlobalModule->setDataLayout(GlobalTargetMachine->createDataLayout());
+			GlobalModule->setTargetTriple(HostTriple);
+
 			// construct a print function
 			vector<llvm::Type *> printfCharPtrParam;
 			printfCharPtrParam.push_back(llvm::Type::getInt8PtrTy(GlobalContext));
@@ -236,8 +301,42 @@ struct ProgramNode : public ASTNode {
 	}
 
 	void
-	GenerateCodeRecursive(llvm::raw_string_ostream& ss) {
+	GenerateCodeRecursive(llvm::raw_string_ostream& ss, llvm::raw_string_ostream& ss1) {
 		ASTNode::GenerateCode(nullptr);
+
+		  // To build and run the pass manager...
+
+		llvm::Triple ModuleTriple(GlobalModule->getTargetTriple());
+
+		std::unique_ptr<llvm::legacy::PassManager> MPM(new llvm::legacy::PassManager);
+		llvm::TargetLibraryInfoImpl TLII(ModuleTriple);
+		MPM->add(new llvm::TargetLibraryInfoWrapperPass(TLII));
+
+		std::unique_ptr<llvm::legacy::FunctionPassManager> FPM(new llvm::legacy::FunctionPassManager(GlobalModule));
+		FPM->add(createTargetTransformInfoWrapperPass(GlobalTargetMachine->getTargetIRAnalysis()));
+
+		llvm::PassManagerBuilder PMBuilder;
+		PMBuilder.OptLevel = 3;
+		PMBuilder.SizeLevel = 0;
+		PMBuilder.Inliner = llvm::createFunctionInliningPass(PMBuilder.OptLevel, PMBuilder.SizeLevel, false);
+		PMBuilder.LoopVectorize = true;
+
+		GlobalTargetMachine->adjustPassManager(PMBuilder);
+
+		PMBuilder.populateFunctionPassManager(*FPM);
+		PMBuilder.populateModulePassManager(*MPM);
+
+		// Print IR before optimization
+		GlobalModule->print(ss1, nullptr);
+
+		// FPM->doInitialization();
+		// for (llvm::Function &F : *GlobalModule)
+		// 	FPM->run(F);
+		// FPM->doFinalization();
+
+		MPM->run(*GlobalModule);
+
+		// Print IR after optimization
 		GlobalModule->print(ss, nullptr);
 	}
 

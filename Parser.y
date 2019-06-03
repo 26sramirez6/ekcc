@@ -7,6 +7,7 @@
     #include <string>
     #include <fstream>
     #include <sstream>
+    #include <llvm/Support/TargetSelect.h>
     #include "CompilerConfig.hpp"
     #include "ValidTypes.hpp"
     #include "AST.hpp"
@@ -34,6 +35,7 @@
     #include <string>
     #include <fstream>
     #include <sstream>
+    #include <llvm/Support/TargetSelect.h>
     #include "CompilerConfig.hpp"
     #include "ValidTypes.hpp"
     #include "AST.hpp"
@@ -329,6 +331,10 @@ llvm::Function * ASTNode::cintNegateFunction_ = nullptr;
 	
 int 
 main(int argc, char ** argv) {
+
+  llvm::InitializeNativeTarget();
+  llvm::InitializeNativeTargetAsmPrinter();
+  llvm::InitializeNativeTargetAsmParser();
 	
 	CompilerConfig cfg(argc, argv);
 	if (!cfg.properConfig_) {
@@ -374,8 +380,10 @@ main(int argc, char ** argv) {
 	}
 	
 	string stringIR("");
+  string stringIRbefore("");
 	llvm::raw_string_ostream ssIR(stringIR);
-	root->GenerateCodeRecursive(ssIR);
+  llvm::raw_string_ostream ssIRbefore(stringIRbefore);
+	root->GenerateCodeRecursive(ssIR, ssIRbefore);
 	
 	if (cfg.optimize_) {
 		root->AddOptimizations();
@@ -386,6 +394,13 @@ main(int argc, char ** argv) {
 	}
 	
 	if (!cfg.outputFile_.empty()) {
+
+    // print IR before optimization
+    ofstream out1(cfg.outputFile_ + "_before.ll");
+		out1 << ssIRbefore.str() << endl;
+		out1.close();
+
+    // print IR after optimization
 		ofstream out(cfg.outputFile_ + ".ll");
 		out << ssIR.str() << endl;
 		out.close();

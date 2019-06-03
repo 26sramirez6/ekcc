@@ -11,6 +11,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Target/TargetMachine.h"
 #include <string>
 
 using std::string;
@@ -18,6 +19,7 @@ using std::string;
 static llvm::LLVMContext GlobalContext;
 static llvm::IRBuilder<> GlobalBuilder(GlobalContext);
 static llvm::Module * GlobalModule;
+static std::unique_ptr<llvm::TargetMachine> GlobalTargetMachine;
 
 static llvm::AllocaInst *
 CreateEntryBlockAllocaFloat(llvm::Function * function, const string &varName) {
