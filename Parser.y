@@ -8,6 +8,7 @@
     #include <fstream>
     #include <sstream>
     #include <llvm/Support/TargetSelect.h>
+    #include <llvm/Support/InitLLVM.h>
     #include "CompilerConfig.hpp"
     #include "ValidTypes.hpp"
     #include "AST.hpp"
@@ -36,6 +37,7 @@
     #include <fstream>
     #include <sstream>
     #include <llvm/Support/TargetSelect.h>
+    #include <llvm/Support/InitLLVM.h>
     #include "CompilerConfig.hpp"
     #include "ValidTypes.hpp"
     #include "AST.hpp"
@@ -311,6 +313,7 @@ VarTable ASTNode::varTable_;
 FuncTable ASTNode::funcTable_;
 tuple<string, int> ASTNode::recursiveFuncPlaceHolder_ = make_tuple("", -1);
 bool ASTNode::runDefined_ = false;
+llvm::Function * ASTNode::runFunction_ = nullptr;
 llvm::Function * ASTNode::printfFunction_ = nullptr;
 llvm::Function * ASTNode::cintAddFunction_ = nullptr;
 llvm::Function * ASTNode::cintMultiplyFunction_ = nullptr;
@@ -331,23 +334,22 @@ llvm::Function * ASTNode::cintNegateFunction_ = nullptr;
 	
 int 
 main(int argc, char ** argv) {
+	
+	CompilerConfig cfg(argc, argv);
+	if (!cfg.properConfig_) {
+		cfg.PrintUsage();
+		return 1;
+	} else if (cfg.help_) {
+		cfg.PrintUsage();
+		return 0;
+	}
+
+  //if (cfg.jit_) llvm::InitLLVM X(argc, argv);
 
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
   llvm::InitializeNativeTargetAsmParser();
-	
-	CompilerConfig cfg(argc, argv);
-	if (!cfg.properConfig_) {
-		cout << "Usage: [-h|-?] [-v] [-O] " <<
-				"[-emit-ast|-emit-llvm] -o " <<
-				"<output-file> <input-file>" << endl;
-		return 1;
-	} else if (cfg.help_) {
-		cout << "Usage: [-h|-?] [-v] [-O] " <<
-				"[-emit-ast|-emit-llvm] -o " <<
-				"<output-file> <input-file>" << endl;
-		return 0;
-	}
+
 	// open a file handle to a particular file:
 	FILE * unit = fopen(cfg.inputFile_, "r");
 	// make sure it's valid:
@@ -380,27 +382,15 @@ main(int argc, char ** argv) {
 	}
 	
 	string stringIR("");
-  string stringIRbefore("");
 	llvm::raw_string_ostream ssIR(stringIR);
-  llvm::raw_string_ostream ssIRbefore(stringIRbefore);
-	root->GenerateCodeRecursive(ssIR, ssIRbefore);
-	
-	if (cfg.optimize_) {
-		root->AddOptimizations();
-	}
-	
+  root->GenerateCodeRecursive(ssIR, cfg.optimize_);
+ 
 	if (cfg.emitLLVM_) {
 		cout << ssIR.str() << endl;
 	}
 	
-	if (!cfg.outputFile_.empty()) {
+	if (!cfg.outputFile_.empty() && !cfg.jit_) {
 
-    // print IR before optimization
-    ofstream out1(cfg.outputFile_ + "_before.ll");
-		out1 << ssIRbefore.str() << endl;
-		out1.close();
-
-    // print IR after optimization
 		ofstream out(cfg.outputFile_ + ".ll");
 		out << ssIR.str() << endl;
 		out.close();
@@ -427,7 +417,9 @@ main(int argc, char ** argv) {
 		} else { // parent
 			wait(NULL);
 		}
-	}	
+	}	else if (cfg.jit_) {
+    root->ExecuteJIT();
+  }
 	
 	
 	

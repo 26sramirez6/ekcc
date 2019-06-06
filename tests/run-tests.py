@@ -55,66 +55,77 @@ true_outputs = [
 ]
 total_passed = 0
 failed = []
-for i in range(1,len(true_outputs)+1):
-    print("---------TEST {0}----------".format(i))
-    if i < 13:
-        continue
-        pipe = Popen(["./ekcc", "-o", "./tests/out/test{0}.yaml".format(i),
-                      "./tests/test{0}.ek".format(i)], 
-                      stdout=PIPE)
-                      
-        test_output = pipe.communicate()[0].decode("utf-8")
-        print(test_output)
-    
-        print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1]) )
-    
-        if (true_outputs[i-1]==0 and pipe.returncode!=0) or (true_outputs[i-1]!=0 and pipe.returncode==0):
-            print("Test {0} failed".format(i))
-            failed.append(i)
-        else:
-            print("Test {0} pass".format(i))
-            total_passed += 1
-    else:
-        pipe = Popen(["./ekcc", "-o", 
-                      "./out/test{0}".format(i), 
-                      "./tests/test{0}.ek".format(i)], 
-                      stdout=PIPE)
-                      
-        test_output = pipe.communicate()[0].decode("utf-8")
-        print(test_output)
-        print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1][0]) )
-    
-        if (true_outputs[i-1][0]==0 and pipe.returncode!=0) or (true_outputs[i-1][0]!=0 and pipe.returncode==0):
-            print("Test {0} failed".format(i))
-            failed.append(i)
-        else:
-            # now run it
-            if os.path.isfile("./out/test{0}".format(i)):
-                if i==31 or i==32:
-                    pipe = Popen(["./out/test{0}".format(i), 
-                                  true_outputs[i-1][2]],
-                                  stdout=PIPE)
-                else:
-                    pipe = Popen(["./out/test{0}".format(i)], stdout=PIPE)
-                test_output = pipe.communicate()[0].decode("utf-8")
-                if 26<i<31: 
-                    print(test_output)
-                    if test_output!=true_outputs[i-1][2]:
-                        print("Test {0} failed".format(i))
-                        failed.append(i)
-                        continue
-                print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1][1]) )
-                if pipe.returncode!=true_outputs[i-1][1]:
-                    print("Test {0} failed".format(i))
-                    failed.append(i)
-                else:
-                    total_passed += 1
-                    print("Test {0} pass".format(i))
-            else:
-                print("Test {0} failed".format(i))
-                failed.append(i)
+# first pass is non-optimized, second pass is optimized
+for j in range(2):
+    for i in range(1,len(true_outputs)+1):
+        testNum = j*len(true_outputs) + i
+        print("---------TEST {0}----------".format(testNum))
+        if i < 13:
+            continue
+            pipe = Popen(["./ekcc", "-o", "./tests/out/test{0}.yaml".format(i),
+                        "./tests/test{0}.ek".format(i)], 
+                        stdout=PIPE)
+                        
+            test_output = pipe.communicate()[0].decode("utf-8")
+            print(test_output)
         
-print("{0}/{1} tests passed".format(total_passed, len(true_outputs)))
+            print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1]) )
+        
+            if (true_outputs[i-1]==0 and pipe.returncode!=0) or (true_outputs[i-1]!=0 and pipe.returncode==0):
+                print("Test {0} failed".format(testNum))
+                failed.append(i)
+            else:
+                print("Test {0} pass".format(testNum))
+                total_passed += 1
+        else:
+            if j==0:
+                exename = "./out/test{0}".format(i)
+                pipe = Popen(["./ekcc", "-o", 
+                            exename, 
+                            "./tests/test{0}.ek".format(i)], 
+                            stdout=PIPE)
+            else:
+                exename = "./out/test{0}opt".format(i)
+                pipe = Popen(["./ekcc", "-O", "-o", 
+                            exename, 
+                            "./tests/test{0}.ek".format(i)], 
+                            stdout=PIPE)
+                        
+            test_output = pipe.communicate()[0].decode("utf-8")
+            print(test_output)
+            print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1][0]) )
+        
+            if (true_outputs[i-1][0]==0 and pipe.returncode!=0) or (true_outputs[i-1][0]!=0 and pipe.returncode==0):
+                print("Test {0} failed".format(testNum))
+                failed.append(i)
+            else:
+                # now run it
+                if os.path.isfile(exename):
+                    if i==31 or i==32:
+                        pipe = Popen([exename, 
+                                    true_outputs[i-1][2]],
+                                    stdout=PIPE)
+                    else:
+                        pipe = Popen([exename], stdout=PIPE)
+                    test_output = pipe.communicate()[0].decode("utf-8")
+                    if 26<i<31: 
+                        print(test_output)
+                        if test_output!=true_outputs[i-1][2]:
+                            print("Test {0} failed".format(testNum))
+                            failed.append(i)
+                            continue
+                    print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1][1]) )
+                    if pipe.returncode!=true_outputs[i-1][1]:
+                        print("Test {0} failed".format(testNum))
+                        failed.append(i)
+                    else:
+                        total_passed += 1
+                        print("Test {0} pass".format(testNum))
+                else:
+                    print("Test {0} failed".format(testNum))
+                    failed.append(i)
+        
+print("{0}/{1} tests passed".format(total_passed, len(true_outputs)*2))
 
 if len(failed):
     print("test failures: {0}".format(failed))

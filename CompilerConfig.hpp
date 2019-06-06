@@ -12,12 +12,15 @@
 #include <string>
 #include <string.h>
 
+using std::cout;
+using std::endl;
 using std::string;
 using std::equal;
 
 struct CompilerConfig {
 	bool help_ = false;
 	bool emitAST_ = false;
+	bool jit_ = false;
 	bool optimize_ = false;
 	bool emitLLVM_ = false;
 	bool properConfig_ = false;
@@ -34,6 +37,8 @@ struct CompilerConfig {
 				this->emitAST_ = true;
 			} else if (!strcmp(argv[i], "-emit-llvm")) {
 				this->emitLLVM_ = true;
+			} else if (!strcmp(argv[i], "-jit")) {
+				this->jit_ = true;
 			} else if (!strcmp(argv[i], "-O")) {
 				this->optimize_ = true;
 			} else if (!strcmp(argv[i], "-o")) {
@@ -44,8 +49,14 @@ struct CompilerConfig {
 				inputFileSet = true;
 			}
 		}
+		if (outputFileSet && this->jit_) {
+			this->properConfig_ = false;
+		} else if (outputFileSet) {
+			this->properConfig_ = inputFileSet && outputFileSet;
+		} else {
+			this->properConfig_ = inputFileSet && this->jit_;
+		}
 
-		this->properConfig_ = inputFileSet && outputFileSet;
 	}
 
 	static bool EndsWith(string const & str,
@@ -56,6 +67,13 @@ struct CompilerConfig {
 
 	    return equal(suffix.rbegin(),
 	    		suffix.rend(), str.rbegin());
+	}
+
+	void 
+	PrintUsage() {
+		cout << "Usage: [-h|-?] [-v] [-O] " <<
+			"[-emit-ast|-emit-llvm] [-jit | -o <output-file>] " <<
+			"<input-file>" << endl;
 	}
 };
 

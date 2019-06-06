@@ -8,17 +8,20 @@
 #ifndef EKCC_LLVMGLOBALS_HPP_
 #define EKCC_LLVMGLOBALS_HPP_
 
+#include <string>
+#include <memory>
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Target/TargetMachine.h"
-#include <string>
 
+using std::unique_ptr;
 using std::string;
 
 static llvm::LLVMContext GlobalContext;
 static llvm::IRBuilder<> GlobalBuilder(GlobalContext);
 static llvm::Module * GlobalModule;
+static unique_ptr<llvm::Module> GlobalModuleUPtr;
 static std::unique_ptr<llvm::TargetMachine> GlobalTargetMachine;
 
 static llvm::AllocaInst *

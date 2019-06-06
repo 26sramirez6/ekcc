@@ -37,6 +37,9 @@
 #include <llvm/Bitcode/BitcodeWriterPass.h>
 #include <llvm/CodeGen/TargetPassConfig.h>
 #include <llvm/Config/llvm-config.h>
+// #include <llvm/ExecutionEngine/JIT.h>
+#include <llvm/ExecutionEngine/MCJIT.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/IRPrintingPasses.h>
@@ -83,10 +86,12 @@ using std::unordered_map;
 using std::tuple;
 using std::get;
 using std::unique_ptr;
+
 typedef unordered_map<string, tuple<ValidType *, llvm::AllocaInst *>> VarTable;
 typedef unordered_map<string, tuple<ValidType *, llvm::AllocaInst * >>::const_iterator VarTableEntry;
 typedef unordered_map<string, tuple<vector< ValidType * >, llvm::Function *> > FuncTable;
 typedef unordered_map<string, tuple<vector< ValidType * >, llvm::Function *> >::const_iterator FuncTableEntry;
+typedef int (*JitFunc)();
 
 struct ASTNode {
 	static ASTNode * root_;
@@ -97,6 +102,7 @@ struct ASTNode {
 	static tuple<string, int> recursiveFuncPlaceHolder_;
 	static VarTable varTable_;
 	static bool runDefined_;
+	static llvm::Function * runFunction_;
 	static llvm::Function * printfFunction_;
 	static llvm::Function * cintAddFunction_;
 	static llvm::Function * cintMultiplyFunction_;
@@ -191,7 +197,8 @@ struct ASTNode {
 			}
 
 			// construct global module
-			GlobalModule = new llvm::Module(inputFile, GlobalContext);
+			GlobalModuleUPtr = unique_ptr<llvm::Module>{new llvm::Module(inputFile, GlobalContext)};
+			GlobalModule = GlobalModuleUPtr.get();
 
 			// Note: If you're using the JIT, you'll get the TM from the JIT engine...
 			std::string Err;
@@ -301,10 +308,35 @@ struct ProgramNode : public ASTNode {
 	}
 
 	void
-	GenerateCodeRecursive(llvm::raw_string_ostream& ss, llvm::raw_string_ostream& ss1) {
+	GenerateCodeRecursive(llvm::raw_string_ostream& ss, bool optimize) {
 		ASTNode::GenerateCode(nullptr);
 
-		  // To build and run the pass manager...
+		if (optimize) {
+			AddOptimizations();
+		}
+
+		// Print IR without optimization
+		GlobalModule->print(ss, nullptr);
+	}
+
+	string
+	GetCompilerErrors() {
+		string ret = "";
+		for (auto e : ASTNode::compilerErrors_) {
+			ret += e;
+		}
+		return ret;
+	}
+
+	bool
+	HasCompilerErrors() {
+		return ASTNode::compilerErrors_.size() > 0;
+	}
+
+	void
+	AddOptimizations() {
+
+		// To build and run the pass manager...
 
 		llvm::Triple ModuleTriple(GlobalModule->getTargetTriple());
 
@@ -326,67 +358,37 @@ struct ProgramNode : public ASTNode {
 		PMBuilder.populateFunctionPassManager(*FPM);
 		PMBuilder.populateModulePassManager(*MPM);
 
-		// Print IR before optimization
-		GlobalModule->print(ss1, nullptr);
-
-		// FPM->doInitialization();
-		// for (llvm::Function &F : *GlobalModule)
-		// 	FPM->run(F);
-		// FPM->doFinalization();
+		FPM->doInitialization();
+		for (llvm::Function &F : *GlobalModule)
+			FPM->run(F);
+		FPM->doFinalization();
 
 		MPM->run(*GlobalModule);
-
-		// Print IR after optimization
-		GlobalModule->print(ss, nullptr);
-	}
-
-	string
-	GetCompilerErrors() {
-		string ret = "";
-		for (auto e : ASTNode::compilerErrors_) {
-			ret += e;
-		}
-		return ret;
-	}
-
-	bool
-	HasCompilerErrors() {
-		return ASTNode::compilerErrors_.size() > 0;
 	}
 
 	void
-	AddOptimizations() {
-		// sets up optimizations if needed
-//		llvm::LLVMPassManagerBuilderRef passBuilder;
-//
-//		passBuilder = llvm::LLVMPassManagerBuilderCreate();
-//		llvm::LLVMPassManagerBuilderSetOptLevel(passBuilder, 3);
-//		llvm::LLVMPassManagerBuilderSetSizeLevel(passBuilder, 0);
-//
-//		llvm::LLVMPassManagerRef functionPasses =
-//			llvm::LLVMCreateFunctionPassManagerForModule(GlobalModule);
-//		llvm::LLVMPassManagerRef modulePasses =
-//			llvm::LLVMCreatePassManager();
-//
-//		llvm::LLVMPassManagerBuilderPopulateFunctionPassManager(
-//				passBuilder, functionPasses);
-//		llvm::LLVMPassManagerBuilderPopulateModulePassManager(
-//				passBuilder, modulePasses);
-//
-//		llvm::LLVMPassManagerBuilderDispose(passBuilder);
-//
-//		llvm::LLVMInitializeFunctionPassManager(functionPasses);
-//		for (llvm::LLVMValueRef value = llvm::LLVMGetFirstFunction(GlobalModule);
-//			 value; value = llvm::LLVMGetNextFunction(value)) {
-//			llvm::LLVMRunFunctionPassManager(functionPasses, value);
-//		}
-//
-//		llvm::LLVMFinalizeFunctionPassManager(functionPasses);
-//
-//		llvm::LLVMRunPassManager(modulePasses, GlobalModule);
-//
-//		llvm::LLVMDisposePassManager(functionPasses);
-//		llvm::LLVMDisposePassManager(modulePasses);
+	ExecuteJIT(){
+
+		string error;
+		llvm::EngineBuilder enginebuilder(move(GlobalModuleUPtr));
+		llvm::ExecutionEngine * engine = enginebuilder.setErrorStr(&error).create();
+		if (!engine) {
+			cout << "error: failed to create execution engine" << endl;
+			exit(1);
+		}
+		engine->finalizeObject();
+		if (ASTNode::runFunction_) { 
+			JitFunc runFunc = (JitFunc)engine->getPointerToFunction(ASTNode::runFunction_);
+			cout << runFunc() << endl;
+		} else {
+			cout << "error: failed to find run function in execution engine" << endl;
+			exit(1);
+		}
+		// FuncsNode * funcsNode = this->children_[0];
+		// for (auto n: funcsNode->children_) {
+		// 	FuncNode * funcNode = (FuncNode *)n 
+		// }
+		
 	}
 };
 
@@ -1701,15 +1703,15 @@ struct StatementNode: public ASTNode {
 			break;
 		case 1:
 			GlobalBuilder.CreateRetVoid();
-			GlobalBuilder.SetInsertPoint(startBlock);
-			GlobalBuilder.CreateBr(endOfMiddleBlock);
+			// GlobalBuilder.SetInsertPoint(startBlock);
+			// GlobalBuilder.CreateBr(endOfMiddleBlock);
 			break;
 		case 2:
 		{
 			llvm::Value * rhs = this->exprNode_->GenerateCode(endOfMiddleBlock);
 			GlobalBuilder.CreateRet(rhs);
-			GlobalBuilder.SetInsertPoint(startBlock);
-			GlobalBuilder.CreateBr(endOfMiddleBlock);
+			// GlobalBuilder.SetInsertPoint(startBlock);
+			// GlobalBuilder.CreateBr(endOfMiddleBlock);
 			break;
 		}
 		case 3:
@@ -2083,7 +2085,6 @@ struct FuncNode : public ASTNode {
 			}
 		}
 
-
 		llvm::BasicBlock * middleBlock = (llvm::BasicBlock *)
 				this->blockNode_->GenerateCode(endBlock);
 
@@ -2099,7 +2100,9 @@ struct FuncNode : public ASTNode {
 
 		// now put it in func table
 		get<1>(ASTNode::funcTable_[this->identifier_]) = ret;
-
+		if (this->isRunFunc_) {
+			ASTNode::runFunction_ = ret;
+		}
 		return ret;
 	}
 
