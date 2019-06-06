@@ -7,12 +7,12 @@ To produce the ekcc executable,
 Please note input-file has to end with .ek.
 -
 -h | -?		For help/useful message.
--v		// To be done. Verbose mode.
--O		// To be done. For optimizations.
+-v		Verbose mode
+-O		Add optimizations
 -emit-ast	To output AST in .yaml format
--emit-llvm	// To be done
+-emit-llvm	Output llvm
 -o 		Output <output-file> <input-file>
-
+-jit		run in jit mode
 
 We have included our own test-suite that runs through several sample input 
 files located in "tests/" and checks the return codes and error message print outs.
