@@ -418,7 +418,7 @@ main(int argc, char ** argv) {
 			wait(NULL);
 		}
 	}	else if (cfg.jit_) {
-    root->ExecuteJIT();
+    root->ExecuteJIT(argc, argv);
   }
 	
 	

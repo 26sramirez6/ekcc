@@ -20,49 +20,58 @@
 
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
+#include <llvm/ADT/Triple.h>
+
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Verifier.h"
+#include <llvm/IR/DataLayout.h>
+#include <llvm/IR/DebugInfo.h>
+#include <llvm/IR/IRPrintingPasses.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/LegacyPassNameParser.h>
 
-#include <llvm/ADT/Triple.h>
 #include <llvm/Analysis/CallGraph.h>
 #include <llvm/Analysis/CallGraphSCCPass.h>
 #include <llvm/Analysis/LoopPass.h>
 #include <llvm/Analysis/RegionPass.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
+
 #include <llvm/Bitcode/BitcodeWriterPass.h>
 #include <llvm/CodeGen/TargetPassConfig.h>
 #include <llvm/Config/llvm-config.h>
 // #include <llvm/ExecutionEngine/JIT.h>
 #include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/IR/DataLayout.h>
-#include <llvm/IR/DebugInfo.h>
-#include <llvm/IR/IRPrintingPasses.h>
-#include <llvm/IR/LegacyPassManager.h>
-#include <llvm/IR/LegacyPassNameParser.h>
+
+
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/InitializePasses.h>
 #include <llvm/MC/SubtargetFeature.h>
+
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Host.h>
 #include <llvm/Support/InitLLVM.h>
-
-// #include <llvm/Support/PluginLoader.h>
-//CommandLine Error: Option 'load' registered more than once!
-//LLVM ERROR: inconsistency in registered CommandLine options
-
+#include "llvm/Support/CommandLine.h"
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/SystemUtils.h>
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/ToolOutputFile.h>
 #include <llvm/Support/YAMLTraits.h>
+// #include <llvm/Support/PluginLoader.h>
+//CommandLine Error: Option 'load' registered more than once!
+//LLVM ERROR: inconsistency in registered CommandLine options
+
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Transforms/Coroutines.h>
 #include <llvm/Transforms/IPO.h>
@@ -70,13 +79,12 @@
 #include <llvm/Transforms/Utils/Cloning.h>
 
 #include "llvm-c/Types.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Type.h"
-#include "llvm/IR/InstrTypes.h"
-#include "llvm/IR/Verifier.h"
-#include "llvm/Support/CommandLine.h"
+#include "llvm/Object/ObjectFile.h"
+
+
 #include "ValidTypes.hpp"
 #include "LLVMGlobals.hpp"
+
 using std::vector;
 using std::string;
 using std::to_string;
@@ -367,23 +375,52 @@ struct ProgramNode : public ASTNode {
 	}
 
 	void
-	ExecuteJIT(){
+	ExecuteJIT(int argc, char ** argv){
 
 		string error;
 		llvm::EngineBuilder enginebuilder(move(GlobalModuleUPtr));
 		llvm::ExecutionEngine * engine = enginebuilder.setErrorStr(&error).create();
 		if (!engine) {
 			cout << "error: failed to create execution engine" << endl;
-			exit(1);
+			exit(1);  
 		}
+		string objectFileName("./main.o");
+
+		llvm::ErrorOr<unique_ptr<llvm::MemoryBuffer>> buffer =
+		llvm::MemoryBuffer::getFile(objectFileName.c_str());
+
+		if(!buffer){
+			cout << "no buffer" << endl;
+		}
+
+		llvm::Expected<unique_ptr<llvm::object::ObjectFile>> objectOrError =
+		llvm::object::ObjectFile::createObjectFile(buffer.get()->getMemBufferRef());
+
+		if(!objectOrError){
+			cout << "no objectfile" << endl;
+		}
+
+		unique_ptr<llvm::object::ObjectFile> objectFile(std::move(objectOrError.get()));
+
+		auto owningObject = llvm::object::OwningBinary<llvm::object::ObjectFile>(
+			std::move(objectFile), std::move(buffer.get()));
+
+		engine->addObjectFile(std::move(owningObject));
+
+		//auto mainObj = llvm::object::ObjectFile::createObjectFile("main.o");
+		//engine->addObjectFile(mainObj->getBinary());
 		engine->finalizeObject();
-		if (ASTNode::runFunction_) { 
-			JitFunc runFunc = (JitFunc)engine->getPointerToFunction(ASTNode::runFunction_);
-			cout << runFunc() << endl;
-		} else {
-			cout << "error: failed to find run function in execution engine" << endl;
-			exit(1);
-		}
+		auto mainLLVMFunction = engine->FindFunctionNamed("main");
+		int (*mainFunc)(int, char **) = (int(*)(int,char**))engine->getPointerToFunction(mainLLVMFunction);
+		mainFunc(argc, argv);
+
+		// if (ASTNode::runFunction_) { 
+		// 	JitFunc runFunc = (JitFunc)engine->getPointerToFunction(ASTNode::runFunction_);
+		// 	runFunc();
+		// } else {
+		// 	cout << "error: failed to find run function in execution engine" << endl;
+		// 	exit(1);
+		// }
 		// FuncsNode * funcsNode = this->children_[0];
 		// for (auto n: funcsNode->children_) {
 		// 	FuncNode * funcNode = (FuncNode *)n 
