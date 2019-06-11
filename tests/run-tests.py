@@ -2,6 +2,7 @@ import sys
 import subprocess
 import os
 import time
+import pandas as pd
 from subprocess import Popen, PIPE
 subprocess.getoutput("rm -r -f out")
 subprocess.getoutput("mkdir out")
@@ -66,14 +67,34 @@ true_outputs = [
 total_passed = 0
 failed = []
 
-def run_and_record_process_time(args, record_time, compile_or_run="compile"):
+metrics = [{"Test #": i, 
+  "Compile-time unoptimized": None, 
+  "Run-time unoptimized": None, 
+  "Compile-time optimized": None, 
+  "Run-time optimized": None} 
+for i in range(1,43)]
+
+def run_and_record_process_time(args, i, j, compile_or_run="compile"):
     print(" ".join(args))
-    if record_time:
+    if j!=2:
         time_start = time.time()
     pipe = Popen(args, stdout=PIPE)
-    if record_time:
+    if j!=2:
         time_end = time.time()
-        print("{0} time:".format(compile_or_run), time_end-time_start)
+        diff = time_end-time_start
+        print("{0} time:".format(compile_or_run), diff)
+    
+    if compile_or_run=="compile":
+        if j==0:
+            metrics[i-1]["Compile-time unoptimized"] = diff
+        elif j==1:
+            metrics[i-1]["Compile-time optimized"] = diff
+    else:
+        if j==0:
+            metrics[i-1]["Run-time unoptimized"] = diff
+        elif j==1:
+            metrics[i-1]["Run-time optimized"] = diff
+            
     return pipe
 
 # first pass is non-optimized, second pass is optimized, third pass is jit and optimized
@@ -88,7 +109,7 @@ for j in range(3):
                 args = ["./ekcc", "-o", "./out/test{0}".format(i),
                         "./tests/test{0}.ek".format(i)]
             
-            pipe = run_and_record_process_time(args, j!=2)
+            pipe = run_and_record_process_time(args, i, j)
             
             print(" ".join(args))
             test_output = pipe.communicate()[0].decode("utf-8")
@@ -106,17 +127,17 @@ for j in range(3):
             if j==0:
                 exename = "./out/test{0}".format(i)
                 args = ["./ekcc", "-o", exename, "./tests/test{0}.ek".format(i)]
-                pipe = run_and_record_process_time(args, j!=2)
+                pipe = run_and_record_process_time(args, i, j)
             elif j==1:
                 exename = "./out/test{0}opt".format(i)
                 args = ["./ekcc", "-O", "-o", exename, "./tests/test{0}.ek".format(i)]
-                pipe = run_and_record_process_time(args, j!=2)
+                pipe = run_and_record_process_time(args, i, j)
             elif j==2:
                 extras = ""                    
                 if i==31 or i==32:
                     extras = true_outputs[i-1][2]
                 args = ["./ekcc", "-O", "-jit", "./tests/test{0}.ek".format(i), extras]
-                pipe = run_and_record_process_time(args, j!=2)
+                pipe = run_and_record_process_time(args, i, j)
                 test_output = pipe.communicate()[0].decode("utf-8")
                 if 27<=i<=30:
                     print(test_output)
@@ -146,10 +167,10 @@ for j in range(3):
                 if os.path.isfile(exename):
                     if i==31 or i==32:
                         args = [exename, true_outputs[i-1][2]]
-                        pipe = run_and_record_process_time(args, j!=2, "run")
+                        pipe = run_and_record_process_time(args, i, j, "run")
                     else:
                         args = [exename]
-                        pipe = run_and_record_process_time(args, j!=2, "run")
+                        pipe = run_and_record_process_time(args, i, j, "run")
                     test_output = pipe.communicate()[0].decode("utf-8")
                     if 27<=i<=30: 
                         print(test_output)
@@ -172,3 +193,7 @@ print("{0}/{1} tests passed".format(total_passed, len(true_outputs)*3))
 
 if len(failed):
     print("test failures: {0}".format(failed))
+
+print("Outputting metrics...")
+pd.DataFrame(metrics).to_csv("./out/metrics.csv")
+print("metrics written to ./out/metrics.csv")
