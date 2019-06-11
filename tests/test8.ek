@@ -1,5 +1,5 @@
-extern int getarg(int);
-extern float getargf(int);
+extern int arg(int);
+extern float argf(int);
 
 def int fib (int $n) {
     if ($n < 2)

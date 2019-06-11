@@ -1,3 +1,5 @@
+# error: calling func2 which doesn't exist
+
 def float func1 (ref float $x) {
 	if ($x>0.5) {
 		int $j = 0;
@@ -16,4 +18,5 @@ def int run () {
 	float $j = 8.;
 	ref float $y = $j;
 	func2($y); # error
+	return 0;
 }

@@ -7,6 +7,7 @@
     #include <string>
     #include <fstream>
     #include <sstream>
+    #include <unordered_set>
     #include <llvm/Support/TargetSelect.h>
     #include <llvm/Support/InitLLVM.h>
     #include "CompilerConfig.hpp"
@@ -36,8 +37,10 @@
     #include <string>
     #include <fstream>
     #include <sstream>
+    #include <unordered_set>
     #include <llvm/Support/TargetSelect.h>
     #include <llvm/Support/InitLLVM.h>
+ 
     #include "CompilerConfig.hpp"
     #include "ValidTypes.hpp"
     #include "AST.hpp"
@@ -309,10 +312,13 @@ ASTNode * ASTNode::root_ = nullptr;
 bool ASTNode::ready_ = false;
 vector<string> ASTNode::compilerErrors_;
 vector<int> ASTNode::lineNumberErrors_;
+unordered_set<string> ASTNode::recursiveFuncNames_;
+VariableTypes ASTNode::currentFunctionReturnType_ = VoidVarType;
 VarTable ASTNode::varTable_;
 FuncTable ASTNode::funcTable_;
 tuple<string, int> ASTNode::recursiveFuncPlaceHolder_ = make_tuple("", -1);
 bool ASTNode::runDefined_ = false;
+llvm::Function * ASTNode::currentLLVMFunctionPrototype_ = nullptr;
 llvm::Function * ASTNode::runFunction_ = nullptr;
 llvm::Function * ASTNode::printfFunction_ = nullptr;
 llvm::Function * ASTNode::cintAddFunction_ = nullptr;
@@ -383,7 +389,7 @@ main(int argc, char ** argv) {
 	
 	string stringIR("");
 	llvm::raw_string_ostream ssIR(stringIR);
-  root->GenerateCodeRecursive(ssIR, cfg.optimize_);
+	root->GenerateCodeRecursive(ssIR, cfg.optimize_);
  
 	if (cfg.emitLLVM_) {
 		cout << ssIR.str() << endl;
@@ -399,10 +405,12 @@ main(int argc, char ** argv) {
 		if (rv < 0) {
 			cerr << "error: fork failed\n";
 			return 1;
-		} else if (rv==0) { //child
+		} else if (rv==0) { // child
+			// will execute "clang <file.ll> <main.ll> -o <file.exe>"
 			const char * args[6];
+			string pathConcat = cfg.outputFile_ + string(".ll");
 			args[0] = strdup(QUOTED_CLANG_BINARY);
-			args[1] = (cfg.outputFile_ + ".ll").c_str();
+			args[1] = pathConcat.c_str();
 			args[2] = "main.ll";
 			args[3] = strdup("-o");
 			args[4] = cfg.outputFile_.c_str();
@@ -417,11 +425,9 @@ main(int argc, char ** argv) {
 		} else { // parent
 			wait(NULL);
 		}
-	}	else if (cfg.jit_) {
-    root->ExecuteJIT(argc, argv);
-  }
-	
-	
+	} else if (cfg.jit_) {
+		root->ExecuteJIT(argc-cfg.jitArgStart_-1, &argv[cfg.jitArgStart_-1]);
+	}
 	
 	return 0;
 }

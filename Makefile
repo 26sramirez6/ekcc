@@ -3,7 +3,7 @@ CFLAGS= -Wall -g3 -std=c++1z -Wno-sign-compare -Wno-unused-function -Wno-unused-
 LLVM_CONFIG=--cxxflags --ldflags --system-libs --libs core executionengine mcjit interpreter analysis scalaropts vectorize native instcombine instrumentation ipo
 
 # NOTE: SET THIS VARIABLE!!
-LLVM_ROOT=/usr/local/opt/llvm
+LLVM_ROOT=/home/sramirez266/clang+llvm-7.0.0-x86_64-linux-gnu-ubuntu-16.04
 COMPILE_CMD=$(LLVM_ROOT)/bin/$(CC)
 LLVM_CONFIG_CMD=`$(LLVM_ROOT)/bin/llvm-config $(LLVM_CONFIG)`
 

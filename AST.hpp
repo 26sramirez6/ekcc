@@ -13,6 +13,7 @@
 #include<utility>
 #include<sstream>
 #include<unordered_map>
+#include<unordered_set>
 #include<tuple>
 #include<memory>
 #include<assert.h>
@@ -37,6 +38,8 @@
 #include <llvm/IR/IRPrintingPasses.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/LegacyPassNameParser.h>
+
+#include <llvm/IRReader/IRReader.h>
 
 #include <llvm/Analysis/CallGraph.h>
 #include <llvm/Analysis/CallGraphSCCPass.h>
@@ -94,6 +97,7 @@ using std::unordered_map;
 using std::tuple;
 using std::get;
 using std::unique_ptr;
+using std::unordered_set;
 
 typedef unordered_map<string, tuple<ValidType *, llvm::AllocaInst *>> VarTable;
 typedef unordered_map<string, tuple<ValidType *, llvm::AllocaInst * >>::const_iterator VarTableEntry;
@@ -108,8 +112,11 @@ struct ASTNode {
 	static vector< int > lineNumberErrors_;
 	static FuncTable funcTable_;
 	static tuple<string, int> recursiveFuncPlaceHolder_;
+	static unordered_set<string> recursiveFuncNames_;
+	static llvm::Function * currentLLVMFunctionPrototype_;
 	static VarTable varTable_;
 	static bool runDefined_;
+	static VariableTypes currentFunctionReturnType_;
 	static llvm::Function * runFunction_;
 	static llvm::Function * printfFunction_;
 	static llvm::Function * cintAddFunction_;
@@ -276,12 +283,32 @@ struct ASTNode {
 	}
 
 	static void
-	LogError(unsigned lineNumber, string errorMessage) {
+	LogError(unsigned lineNumber, string errorMessage, bool exitFast=false) {
 		stringstream ss;
 		ss << "error: line " << lineNumber << ": ";
 		ss << errorMessage;
+		ss << endl;
 		ASTNode::compilerErrors_.push_back(ss.str());
+		if (exitFast) {
+			cout << ASTNode::GetCompilerErrors() << endl;
+			exit(1);
+		}
 	}
+
+	static string
+	GetCompilerErrors() {
+		string ret = "";
+		for (auto e : ASTNode::compilerErrors_) {
+			ret += e;
+		}
+		return ret;
+	}
+
+	static bool
+	HasCompilerErrors() {
+		return ASTNode::compilerErrors_.size() > 0;
+	}
+
 };
 
 struct ProgramNode : public ASTNode {
@@ -290,8 +317,7 @@ struct ProgramNode : public ASTNode {
 		this->children_.push_back(funcsNode);
 		ASTNode::root_ = this;
 		if (!ASTNode::runDefined_) {
-			ASTNode::compilerErrors_.push_back(
-				"error: Undefined run function\n");
+			ASTNode::LogError(lineNumber, "Undefined run function");
 		}
 	}
 
@@ -301,8 +327,7 @@ struct ProgramNode : public ASTNode {
 		this->children_.push_back(externs);
 		ASTNode::root_ = this;
 		if (!ASTNode::runDefined_) {
-			ASTNode::compilerErrors_.push_back(
-				"error: Undefined run function\n");
+			ASTNode::LogError(lineNumber, "Undefined run function");
 		}
 	}
 
@@ -325,20 +350,6 @@ struct ProgramNode : public ASTNode {
 
 		// Print IR without optimization
 		GlobalModule->print(ss, nullptr);
-	}
-
-	string
-	GetCompilerErrors() {
-		string ret = "";
-		for (auto e : ASTNode::compilerErrors_) {
-			ret += e;
-		}
-		return ret;
-	}
-
-	bool
-	HasCompilerErrors() {
-		return ASTNode::compilerErrors_.size() > 0;
 	}
 
 	void
@@ -376,7 +387,6 @@ struct ProgramNode : public ASTNode {
 
 	void
 	ExecuteJIT(int argc, char ** argv){
-
 		string error;
 		llvm::EngineBuilder enginebuilder(move(GlobalModuleUPtr));
 		llvm::ExecutionEngine * engine = enginebuilder.setErrorStr(&error).create();
@@ -384,48 +394,13 @@ struct ProgramNode : public ASTNode {
 			cout << "error: failed to create execution engine" << endl;
 			exit(1);  
 		}
-		string objectFileName("./main.o");
-
-		llvm::ErrorOr<unique_ptr<llvm::MemoryBuffer>> buffer =
-		llvm::MemoryBuffer::getFile(objectFileName.c_str());
-
-		if(!buffer){
-			cout << "no buffer" << endl;
-		}
-
-		llvm::Expected<unique_ptr<llvm::object::ObjectFile>> objectOrError =
-		llvm::object::ObjectFile::createObjectFile(buffer.get()->getMemBufferRef());
-
-		if(!objectOrError){
-			cout << "no objectfile" << endl;
-		}
-
-		unique_ptr<llvm::object::ObjectFile> objectFile(std::move(objectOrError.get()));
-
-		auto owningObject = llvm::object::OwningBinary<llvm::object::ObjectFile>(
-			std::move(objectFile), std::move(buffer.get()));
-
-		engine->addObjectFile(std::move(owningObject));
-
-		//auto mainObj = llvm::object::ObjectFile::createObjectFile("main.o");
-		//engine->addObjectFile(mainObj->getBinary());
+		llvm::SMDiagnostic diagnostic;
+		unique_ptr<llvm::Module> m = parseIRFile("main.ll", diagnostic, GlobalContext);
+		engine->addModule(move(m));
 		engine->finalizeObject();
 		auto mainLLVMFunction = engine->FindFunctionNamed("main");
 		int (*mainFunc)(int, char **) = (int(*)(int,char**))engine->getPointerToFunction(mainLLVMFunction);
-		mainFunc(argc, argv);
-
-		// if (ASTNode::runFunction_) { 
-		// 	JitFunc runFunc = (JitFunc)engine->getPointerToFunction(ASTNode::runFunction_);
-		// 	runFunc();
-		// } else {
-		// 	cout << "error: failed to find run function in execution engine" << endl;
-		// 	exit(1);
-		// }
-		// FuncsNode * funcsNode = this->children_[0];
-		// for (auto n: funcsNode->children_) {
-		// 	FuncNode * funcNode = (FuncNode *)n 
-		// }
-		
+		exit(mainFunc(argc, argv));
 	}
 };
 
@@ -444,28 +419,22 @@ struct VdeclNode : public ASTNode {
 		ASTNode(lineNumber), type_(type),
 		identifier_(identifier.substr(1, string::npos)) {
 		if (ASTNode::varTable_.end() != ASTNode::varTable_.find(identifier_)) {
-			stringstream ss;
-			ss << "error: line " << lineNumber;
-			ss << ": variable identifier ";
-			ss << identifier_;
-			ss << " already defined. \n";
-			ASTNode::compilerErrors_.push_back(ss.str());
+			ASTNode::LogError(lineNumber,
+				string("variable identifier ") +
+				identifier +
+				string(" already defined"));
 		} else if (type->varType_ == VoidVarType){
-			stringstream ss;
-			ss << "error: line " << lineNumber;
-			ss << ": variable identifier ";
-			ss << identifier_;
-			ss << " cannot be void. \n";
-			ASTNode::compilerErrors_.push_back(ss.str());
+			ASTNode::LogError(lineNumber,
+				string("variable identifier ") +
+				identifier +
+				string(" cannot be void"));
 		} else if (type->varType_==RefVarType) {
 			RefType * refType = (RefType *) type;
 			if (refType->invalidConstructor_) {
-				stringstream ss;
-				ss << "error: line " << lineNumber;
-				ss << ": variable identifier ";
-				ss << identifier_;
-				ss << " is a ref and points to a ref.\n";
-				ASTNode::compilerErrors_.push_back(ss.str());
+				ASTNode::LogError(lineNumber,
+					string("variable identifier ") +
+					identifier +
+					string(" is a ref and points to a ref."));
 			}
 		}
 		get<0>(ASTNode::varTable_[identifier_]) = type;
@@ -558,12 +527,10 @@ struct ExistingVarNode: public ASTNode {
 		VarTableEntry hit = ASTNode::varTable_.find(this->identifier_);
 		this->resultType_ = get<0>(hit->second);
 		if (hit==ASTNode::varTable_.end()) {
-			stringstream ss;
-			ss << "error: line " << lineNumber << ": ";
-			ss << "variable identifier ";
-			ss << identifier_;
-			ss << " not declared. \n";
-			ASTNode::compilerErrors_.push_back(ss.str());
+			ASTNode::LogError(lineNumber,
+				string("variable identifier ") +
+				identifier +
+				string(" not declared"));
 		}
 	}
 
@@ -604,6 +571,9 @@ struct ExistingFuncNode: public ASTNode {
 
 	llvm::Value *
 	GenerateCode(llvm::BasicBlock * endBlock) {
+		if ( this->identifier_ == ASTNode::currentLLVMFunctionPrototype_->getName().str() ) {
+			return ASTNode::currentLLVMFunctionPrototype_;
+		}
 		llvm::Function * function = get<1>(ASTNode::funcTable_[this->identifier_]);
 		return function;
 	}
@@ -694,11 +664,6 @@ struct ExternNode : public ASTNode {
 				identifier + string("already defined\n"));
 		}
 
-		if (!(identifier=="arg" || identifier=="argf")) {
-			ASTNode::LogError(lineNumber,
-				"invalid extern function");
-		}
-
 
 		llvm::Type * getArgReturnType = nullptr;
 		if (identifier=="arg") {
@@ -707,8 +672,7 @@ struct ExternNode : public ASTNode {
 		} else if (identifier=="argf") {
 			getArgReturnType = llvm::Type::getFloatTy(GlobalContext);
 		} else {
-			ASTNode::LogError(lineNumber, "invalid extern function");
-			exit(1);
+			ASTNode::LogError(lineNumber, "invalid extern function", true);
 		}
 
 		vector<llvm::Type *> getArgParam { llvm::Type::getInt32Ty(GlobalContext) };
@@ -830,7 +794,7 @@ struct UnaryOperationNode: public ASTNode {
 	GenerateCode(llvm::BasicBlock * endBlock) {
 		llvm::Value * ret = nullptr;
 		llvm::Value * R = this->children_[0]->GenerateCode(endBlock);
-		string error = "invalid unary operation in GenerateCode";
+		string error = "error: invalid unary operation in GenerateCode";
 		this->resultType_ = ValidType::GetUnderlyingType(
 			this->children_[0]->resultType_);
 
@@ -904,14 +868,15 @@ struct BinaryOperationNode: public ASTNode {
 		if (this->operationType_ == Cast) {
 			if (!ValidType::IsValidCast(
 					this->castTo_, this->castFrom_)) {
-				ASTNode::compilerErrors_.push_back(error);
+				ASTNode::LogError(this->lineNumber_,
+					string("invalid binary operation."));
 			}
 		} else {
-
 			if (!ValidType::IsValidBinaryOp(
 					this->children_[0]->resultType_,
 					this->children_[1]->resultType_)) {
-				ASTNode::compilerErrors_.push_back(error);
+				ASTNode::LogError(this->lineNumber_,
+					string("invalid binary operation."));
 			}
 		}
 
@@ -963,7 +928,7 @@ struct BinaryOperationNode: public ASTNode {
 		llvm::Value * ret = nullptr;
 		llvm::Value * L = nullptr;
 		llvm::Value * R = nullptr;
-		string error = "invalid binary operation in GenerateCode";
+		string error = "error: invalid binary operation in GenerateCode";
 		switch (this->operationType_) {
 		case Assign:
 		{
@@ -1085,7 +1050,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->children_[0]->resultType_->varType_) {
+			switch (ValidType::GetUnderlyingType(this->children_[0]->resultType_)->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOEQ(L, R, "cmpeq_float");
 			case IntVarType:
@@ -1107,7 +1072,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->children_[0]->resultType_->varType_) {
+			switch (ValidType::GetUnderlyingType(this->children_[0]->resultType_)->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOLT(L, R, "cmplt_float");
 			case IntVarType:
@@ -1125,7 +1090,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->children_[0]->resultType_->varType_) {
+			switch (ValidType::GetUnderlyingType(this->children_[0]->resultType_)->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOGT(L, R, "cmpgt_float");
 			case IntVarType:
@@ -1143,7 +1108,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->children_[0]->resultType_->varType_) {
+			switch (ValidType::GetUnderlyingType(this->children_[0]->resultType_)->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOGT(L, R, "cmpgt_float");
 			case IntVarType:
@@ -1165,7 +1130,7 @@ struct BinaryOperationNode: public ASTNode {
 		{
 			L = this->children_[0]->GenerateCode(endBlock);
 			R = this->children_[1]->GenerateCode(endBlock);
-			switch (this->children_[0]->resultType_->varType_) {
+			switch (ValidType::GetUnderlyingType(this->children_[0]->resultType_)->varType_) {
 			case FloatVarType:
 				return GlobalBuilder.CreateFCmpOGT(L, R, "cmpgt_float");
 			case IntVarType:
@@ -1285,12 +1250,10 @@ struct ExpressionNode: public ASTNode {
 
 		VarTableEntry hit = ASTNode::varTable_.find(existingVarNode->identifier_);
 		if (hit==ASTNode::varTable_.end()) {
-			stringstream ss;
-			ss << "error: line " << lineNumber << ": ";
-			ss << "variable identifier ";
-			ss << existingVarNode->identifier_;
-			ss << " not declared. \n";
-			ASTNode::compilerErrors_.push_back(ss.str());
+			ASTNode::LogError(lineNumber,
+				string("variable identifier ") +
+				existingVarNode->identifier_ +
+				string("not declared."));
 		} else {
 			this->resultType_ = get<0>(hit->second);
 		}
@@ -1303,12 +1266,11 @@ struct ExpressionNode: public ASTNode {
 
 		FuncTableEntry hit = ASTNode::funcTable_.find(existingFuncNode->identifier_);
 		if (hit==ASTNode::funcTable_.end()) {
-			stringstream ss;
-			ss << "error: line " << lineNumber << ": ";
-			ss << "function identifier ";
-			ss << existingFuncNode->identifier_;
-			ss << " not declared. \n";
-			ASTNode::compilerErrors_.push_back(ss.str());
+
+			ASTNode::LogError(lineNumber,
+				string("function identifier ") +
+				existingFuncNode->identifier_ +
+				string(" not declared."));
 		} else {
 			vector<ValidType *> vtypes = get<0>(hit->second);
 			this->resultType_ = vtypes[0];
@@ -1321,9 +1283,10 @@ struct ExpressionNode: public ASTNode {
 			ASTNode * expressionsNode) :
 		ASTNode(lineNumber), constructorCase_(6) {
 		this->children_.push_back(existingFuncNode);
-		for (auto node : expressionsNode->children_) {
-			this->children_.push_back(node);
+		for (unsigned i=0; i<expressionsNode->children_.size(); ++i) {
+			this->children_.push_back(expressionsNode->children_[i]);
 		}
+
 
 		FuncTableEntry hit = ASTNode::funcTable_.find(existingFuncNode->identifier_);
 		if (hit==ASTNode::funcTable_.end()) {
@@ -1332,6 +1295,16 @@ struct ExpressionNode: public ASTNode {
 		} else {
 			vector<ValidType *> vtypes = get<0>(hit->second);
 			this->resultType_ = vtypes[0];
+
+			for (unsigned i=1; i<expressionsNode->children_.size(); ++i) {
+				if (vtypes[i]->varType_==RefVarType) {
+					bool isLiteral = ((ExpressionNode *)expressionsNode->children_[i])->literal_ != nullptr;
+					if (isLiteral) {
+						ASTNode::LogError(lineNumber,
+						"Can't assign function parameter of type ref to a literal");
+					}
+				}
+			}
 		}
 	}
 
@@ -1459,6 +1432,11 @@ struct ExpressionNode: public ASTNode {
 				get<0>(ASTNode::funcTable_[existingFuncNode->identifier_]);
 			for (int i=1; i<this->children_.size(); ++i) {
 				if (funcParams[i]->varType_==RefVarType) {
+					if (this->children_[i]->children_.size()==0) {
+						// should never be here
+						cout << "error: invalid function call" << endl;
+						exit(1);
+					}
 					ExistingVarNode * existingVar = (ExistingVarNode*) (this->children_[i]->children_[0]);
 					llvm::AllocaInst * alloca = get<1>(ASTNode::varTable_[existingVar->identifier_]);
 
@@ -1558,7 +1536,9 @@ struct StatementNode: public ASTNode {
 	StatementNode(unsigned lineNumber, ReturnControl * returnControl) :
 		ASTNode(lineNumber), controlFlow_(returnControl),
 			stmtName_("retstmt"),
-			constructorCase_(1) {}
+			constructorCase_(1) {
+		ASTNode::currentFunctionReturnType_ = VoidVarType;
+	}
 
 	StatementNode(unsigned lineNumber,
 			ReturnControl * returnControl,
@@ -1569,8 +1549,7 @@ struct StatementNode: public ASTNode {
 		exprNode_(expressionNode),
 		constructorCase_(2) {
 		this->children_.push_back(expressionNode);
-		// Check: a function may not return a ref type.
-
+		ASTNode::currentFunctionReturnType_ = expressionNode->resultType_->varType_;
 	}
 
 	StatementNode(unsigned lineNumber,
@@ -2022,19 +2001,24 @@ struct FuncNode : public ASTNode {
 
 		if(identifier == "run"){
 			if(retType->varType_ != IntVarType){
-				stringstream ss;
-				ss << "error: line " << lineNumber << ": ";
-				ss << "return type of run function has to be int. \n";
-				ASTNode::compilerErrors_.push_back(ss.str());
+				ASTNode::LogError(lineNumber,
+					string("return type of run function has to be int"));
 			}
 			this->isRunFunc_ = true;
 			ASTNode::runDefined_ = true;
+		} else if(retType->varType_== RefVarType) {
+			ASTNode::LogError(lineNumber,
+				string("function return type can't be ref."));
+		} else if (retType->varType_!=ASTNode::currentFunctionReturnType_) {
+			ASTNode::LogError(lineNumber,
+				string("mismatched return type from function prototype"));
 		}
 
 		vector< ValidType * > vTypes;
 		vTypes.push_back(retType);
 		CheckFuncTable(lineNumber, identifier);
 		get<0>(ASTNode::funcTable_[identifier]) = vTypes;
+		ASTNode::currentFunctionReturnType_ = VoidVarType;
 	}
 
 	FuncNode(unsigned lineNumber,
@@ -2048,10 +2032,8 @@ struct FuncNode : public ASTNode {
 		this->children_.push_back(blockNode);
 
 		if(identifier == "run"){
-			stringstream ss;
-			ss << "error: line " << lineNumber << ": ";
-			ss << "run function can't take any arguments. \n";
-			ASTNode::compilerErrors_.push_back(ss.str());
+			ASTNode::LogError(lineNumber,
+				string("run function can't take any arguments"));
 		}
 
 		for(auto node : vdeclsNode->children_){
@@ -2059,11 +2041,12 @@ struct FuncNode : public ASTNode {
 			ASTNode::varTable_.erase(vNode->identifier_);
 		}
 
-		if(retType->varType_== RefVarType){
-			stringstream ss;
-			ss << "error: line " << lineNumber << ": ";
-			ss << "function return type can't be ref. \n";
-			ASTNode::compilerErrors_.push_back(ss.str());
+		if(retType->varType_==RefVarType) {
+			ASTNode::LogError(lineNumber,
+				string("function return type can't be ref."));
+		} else if (retType->varType_!=ASTNode::currentFunctionReturnType_) {
+			ASTNode::LogError(lineNumber,
+				string("mismatched return type from function prototype"));
 		}
 
 		vector< ValidType * > vTypes;
@@ -2076,6 +2059,7 @@ struct FuncNode : public ASTNode {
 		CheckFuncTable(lineNumber, identifier);
 
 		get<0>(ASTNode::funcTable_[identifier]) = vTypes;
+		ASTNode::currentFunctionReturnType_ = VoidVarType;
 	}
 
 	llvm::Function *
@@ -2092,6 +2076,8 @@ struct FuncNode : public ASTNode {
 			functionType, llvm::Function::ExternalLinkage,
 			this->identifier_, GlobalModule);
 
+
+		ASTNode::currentLLVMFunctionPrototype_ = ret;
 		// create a new basic block to start insertion into
 		llvm::BasicBlock * entryBlock = llvm::BasicBlock::Create(GlobalContext, "entry", ret);
 		llvm::BasicBlock * endBlock = llvm::BasicBlock::Create(GlobalContext, "exit", ret);
@@ -2147,22 +2133,23 @@ struct FuncNode : public ASTNode {
 	CheckFuncTable(unsigned lineNumber, string identifier) {
 		FuncTableEntry hit = ASTNode::funcTable_.find(identifier);
 		if (hit != ASTNode::funcTable_.end()) {
-			stringstream ss;
-			ss << "error: line " << lineNumber << ": ";
-			ss << "function identifier '";
-			ss << identifier;
-			ss << "' already defined. \n";
-			ASTNode::compilerErrors_.push_back(ss.str());
+			ASTNode::LogError(lineNumber,
+				string("function identifier ") +
+				identifier +
+				string(" already defined"));
 		} else {
 			int checkRecursiveLn = get<1>(ASTNode::recursiveFuncPlaceHolder_);
 			string checkRecursiveId = get<0>(ASTNode::recursiveFuncPlaceHolder_);
-			if (checkRecursiveLn!=-1 && identifier!=checkRecursiveId) {
-				stringstream ss;
-				ss << "error: line " << checkRecursiveLn << ": ";
-				ss << "function identifier ";
-				ss << checkRecursiveId;
-				ss << " not declared. \n";
-				ASTNode::compilerErrors_.push_back(ss.str());
+			bool recursiveCall = checkRecursiveLn!=-1 && identifier==checkRecursiveId;
+			bool missingProto = checkRecursiveLn!=-1 && identifier!=checkRecursiveId;
+
+			if (missingProto) {
+				ASTNode::LogError(checkRecursiveLn,
+					string("function identifier ") +
+					checkRecursiveId +
+					string(" not declared"));
+			} else if (recursiveCall) {
+				ASTNode::recursiveFuncNames_.insert(identifier);
 			}
 		}
 		get<0>(ASTNode::recursiveFuncPlaceHolder_) = "";

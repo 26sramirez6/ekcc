@@ -21,6 +21,7 @@ struct CompilerConfig {
 	bool help_ = false;
 	bool emitAST_ = false;
 	bool jit_ = false;
+	int jitArgStart_ = 0;
 	bool optimize_ = false;
 	bool emitLLVM_ = false;
 	bool properConfig_ = false;
@@ -49,6 +50,19 @@ struct CompilerConfig {
 				inputFileSet = true;
 			}
 		}
+
+		if (this->jit_) {
+			// pick up the start index of the arguments intended for "some_file.ek"
+			// to handle something like "./ekcc -jit some_file.ek 3 4 1 2"
+			for (int i=1; i<argc; ++i) {
+				if (argv[i][0] != '-' &&
+					!CompilerConfig::EndsWith(argv[i], ".ek") ) {
+					this->jitArgStart_ = i;
+					break;
+				}
+			}
+		}
+
 		if (outputFileSet && this->jit_) {
 			this->properConfig_ = false;
 		} else if (outputFileSet) {
@@ -67,6 +81,16 @@ struct CompilerConfig {
 
 	    return equal(suffix.rbegin(),
 	    		suffix.rend(), str.rbegin());
+	}
+
+	static bool StartsWith(string const & str,
+				string const & prefix)
+	{
+		if (prefix.size() > str.size())
+			return false;
+
+		return equal(prefix.begin(),
+				prefix.end(), str.begin());
 	}
 
 	void 
