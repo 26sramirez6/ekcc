@@ -55,6 +55,13 @@ true_outputs = [
 (0, 1), # test 36
 (0, 1), # test 37
 
+# optimization performance
+(0, 50000), # test 38
+(0, 0), # test 39
+(0, 1073741824), # test 40
+(0, 67456126), # test 41
+(0, 199990000) # test 42
+
 ]
 total_passed = 0
 failed = []
