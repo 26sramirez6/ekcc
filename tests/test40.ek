@@ -16,5 +16,9 @@ def int power(int $n, int $v){
 def int run(){
     int $a = 4;
     int $x = power(15, $a);
-    return $x;
+    if($x == 1073741824){
+      return 0;
+    }else{
+      return 1;
+    }
 }

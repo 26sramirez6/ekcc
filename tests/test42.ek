@@ -19,5 +19,10 @@ def int run(){
         inc($n);
     }
 
-    return $b;
+    if ($b == 199990000){
+        return 0;
+    }else{
+        return 1;
+    }
+
 }

@@ -37,5 +37,9 @@ def int reverseInt(int $n){
 
 def int run(){
     int $x = reverseInt(52165476);
-    return $x;
+    if($x == 67456125){
+        return 0;
+    }else{
+        return 1;
+    }
 }

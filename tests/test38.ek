@@ -7,5 +7,9 @@ def int run(){
     while($v < 50000) {
         inc($v);
     }
-    return $v;
+    if($v == 50000){
+      return 0;
+    }else{
+      return 1;
+    }
 }
