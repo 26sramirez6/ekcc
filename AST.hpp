@@ -51,7 +51,6 @@
 #include <llvm/Bitcode/BitcodeWriterPass.h>
 #include <llvm/CodeGen/TargetPassConfig.h>
 #include <llvm/Config/llvm-config.h>
-// #include <llvm/ExecutionEngine/JIT.h>
 #include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 
@@ -71,9 +70,6 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/ToolOutputFile.h>
 #include <llvm/Support/YAMLTraits.h>
-// #include <llvm/Support/PluginLoader.h>
-//CommandLine Error: Option 'load' registered more than once!
-//LLVM ERROR: inconsistency in registered CommandLine options
 
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Transforms/Coroutines.h>
@@ -363,7 +359,9 @@ struct ProgramNode : public ASTNode {
 		llvm::TargetLibraryInfoImpl TLII(ModuleTriple);
 		MPM->add(new llvm::TargetLibraryInfoWrapperPass(TLII));
 
-		std::unique_ptr<llvm::legacy::FunctionPassManager> FPM(new llvm::legacy::FunctionPassManager(GlobalModule));
+		std::unique_ptr<llvm::legacy::FunctionPassManager>
+			FPM(new llvm::legacy::FunctionPassManager(GlobalModule));
+
 		FPM->add(createTargetTransformInfoWrapperPass(GlobalTargetMachine->getTargetIRAnalysis()));
 
 		llvm::PassManagerBuilder PMBuilder;
@@ -2090,10 +2088,6 @@ struct FuncNode : public ASTNode {
 				VdeclNode * vdeclNode = (VdeclNode *)vdeclsNode->children_[idx];
 				arg.setName(vdeclNode->identifier_);
 				get<0>(ASTNode::varTable_[vdeclNode->identifier_]) = vdeclNode->type_;
-//				llvm::AllocaInst * alloca = vdeclNode->type_->CreateEntryBlockAlloca(
-//						ret, vdeclNode->identifier_);
-//				get<1>(ASTNode::varTable_[vdeclNode->identifier_]) = alloca;
-//				GlobalBuilder.CreateStore(&arg, alloca);
 
 				if (vdeclNode->type_->varType_!=RefVarType) {
 					llvm::AllocaInst * alloca = vdeclNode->type_->CreateEntryBlockAlloca(
