@@ -1,0 +1,18 @@
+def void inc (ref int $n) {
+  $n = $n + 1;
+}
+
+def int run() {
+    int $n = 200;
+    int $i = 0;
+    while ($i < $n){
+        int $j = 0;
+        while($j < $i){
+            inc($j);
+            print $j;
+        }
+        inc($i);
+    }
+
+    return 0;
+}

@@ -1,0 +1,20 @@
+def void inc (ref int $n) {
+  $n = $n + 1;
+}
+
+def int power(int $n, int $v){
+    int $i = 0;
+    int $r = 1;
+    while($i < $n){
+        $r = $r * $v;
+        inc($i);
+        
+    }
+    return $r;
+}
+
+def int run(){
+    int $a = 4;
+    int $x = power(15, $a);
+    return $x;
+}

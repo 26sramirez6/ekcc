@@ -1,5 +1,11 @@
-extern int arg(int);
+def void inc (ref int $n) {
+  $n = $n + 1;
+}
 
-def int run() {
-    return arg(0);
+def int run(){
+    int $v = 0;
+    while($v < 50000) {
+        inc($v);
+    }
+    return $v;
 }

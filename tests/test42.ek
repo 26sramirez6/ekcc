@@ -1,0 +1,23 @@
+def void inc (ref int $n) {
+    $n = $n + 1;
+}
+
+def int run(){
+    int $n = 0;
+    int $x = 0;
+    int $y = 0;
+    int $z = $x + $y;
+    int $a = $x + 1;
+    int $b = 1;
+    while($n < 10000){
+        $x = $n;
+        $y = $n + 1;
+        $z = $x + $y;
+        $a = $x + 1;
+        $b = $z * $a;
+
+        inc($n);
+    }
+
+    return $b;
+}
