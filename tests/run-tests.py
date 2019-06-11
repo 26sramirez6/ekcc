@@ -79,6 +79,8 @@ def run_and_record_process_time(args, i, j, compile_or_run="compile"):
     if j!=2:
         time_start = time.time()
     pipe = Popen(args, stdout=PIPE)
+    output = pipe.communicate()[0].decode("utf-8")
+    return_code = pipe.returncode
     if j!=2:
         time_end = time.time()
         diff = time_end-time_start
@@ -95,7 +97,7 @@ def run_and_record_process_time(args, i, j, compile_or_run="compile"):
         elif j==1:
             metrics[i-1]["Run-time optimized"] = diff
             
-    return pipe
+    return (return_code, output)
 
 # first pass is non-optimized, second pass is optimized, third pass is jit and optimized
 for j in range(3):
@@ -109,15 +111,13 @@ for j in range(3):
                 args = ["./ekcc", "-o", "./out/test{0}".format(i),
                         "./tests/test{0}.ek".format(i)]
             
-            pipe = run_and_record_process_time(args, i, j)
+            rc, test_output = run_and_record_process_time(args, i, j)
             
-            print(" ".join(args))
-            test_output = pipe.communicate()[0].decode("utf-8")
             print(test_output)
         
-            print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1][0]) )
+            print("test_rv: {0}, expected_rv:{1}".format(rc, true_outputs[i-1][0]) )
         
-            if (true_outputs[i-1][0]!=pipe.returncode!=0):
+            if (true_outputs[i-1][0]!=rc!=0):
                 print("Test {0} failed".format(testNum))
                 failed.append(i)
             else:
@@ -127,18 +127,17 @@ for j in range(3):
             if j==0:
                 exename = "./out/test{0}".format(i)
                 args = ["./ekcc", "-o", exename, "./tests/test{0}.ek".format(i)]
-                pipe = run_and_record_process_time(args, i, j)
+                rc, test_output = run_and_record_process_time(args, i, j)
             elif j==1:
                 exename = "./out/test{0}opt".format(i)
                 args = ["./ekcc", "-O", "-o", exename, "./tests/test{0}.ek".format(i)]
-                pipe = run_and_record_process_time(args, i, j)
+                rc, test_output = run_and_record_process_time(args, i, j)
             elif j==2:
                 extras = ""                    
                 if i==31 or i==32:
                     extras = true_outputs[i-1][2]
                 args = ["./ekcc", "-O", "-jit", "./tests/test{0}.ek".format(i), extras]
-                pipe = run_and_record_process_time(args, i, j)
-                test_output = pipe.communicate()[0].decode("utf-8")
+                rc, test_output = run_and_record_process_time(args, i, j)
                 if 27<=i<=30:
                     print(test_output)
                     if test_output!=true_outputs[i-1][2]:
@@ -146,7 +145,7 @@ for j in range(3):
                         #failed.append(i)
                         pass
           
-                if pipe.returncode!=true_outputs[i-1][1]:
+                if rc!=true_outputs[i-1][1]:
                     print("Test {0} failed".format(testNum))
                     failed.append(i)
                 else:
@@ -154,11 +153,10 @@ for j in range(3):
                     print("Test {0} pass".format(testNum))
                 continue
                 
-            test_output = pipe.communicate()[0].decode("utf-8")
             print(test_output)
-            print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1][0]) )
+            print("test_rv: {0}, expected_rv:{1}".format(rc, true_outputs[i-1][0]) )
                 
-            if (true_outputs[i-1][0]!=pipe.returncode!=0):
+            if (true_outputs[i-1][0]!=rc!=0):
                 print("Test {0} failed".format(testNum))
                 failed.append(i)
                 continue
@@ -167,19 +165,18 @@ for j in range(3):
                 if os.path.isfile(exename):
                     if i==31 or i==32:
                         args = [exename, true_outputs[i-1][2]]
-                        pipe = run_and_record_process_time(args, i, j, "run")
+                        rc, test_output = run_and_record_process_time(args, i, j, "run")
                     else:
                         args = [exename]
-                        pipe = run_and_record_process_time(args, i, j, "run")
-                    test_output = pipe.communicate()[0].decode("utf-8")
+                        rc, test_output = run_and_record_process_time(args, i, j, "run")
                     if 27<=i<=30: 
                         print(test_output)
                         if test_output!=true_outputs[i-1][2]:
                             print("Test {0} failed".format(testNum))
                             failed.append(i)
                             continue
-                    print("test_rv: {0}, expected_rv:{1}".format(pipe.returncode, true_outputs[i-1][1]) )
-                    if pipe.returncode!=true_outputs[i-1][1]:
+                    print("test_rv: {0}, expected_rv:{1}".format(rc, true_outputs[i-1][1]) )
+                    if rc!=true_outputs[i-1][1]:
                         print("Test {0} failed".format(testNum))
                         failed.append(i)
                     else:
